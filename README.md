@@ -29,7 +29,7 @@ Inspired by [SmartTwitchTV](https://github.com/fgl27/smarttwitchtv) for Android.
 msx/start.json   MSX start parameter file (entry point)
 main.html        Interaction plugin (the app shell MSX loads)
 js/auth.js       Twitch account login (OAuth device code flow)
-js/twitch.js     Twitch API layer (public GQL + Helix for logged-in data)
+js/twitch.js     Twitch API layer (GQL — anonymous, plus user-token for logged-in data)
 js/app.js        UI: menu, pages, cards, search, favorites, login, settings, playback
 player.html      Video player page with the chat overlay (native HLS + hls.js fallback)
 js/player.js     Player logic (video + chat options panel)

@@ -79,82 +79,60 @@ var Twitch = (function () {
     }
 
     /* ------------------------------------------------------------------ */
-    /* Authenticated (logged-in) data via official Helix API              */
+    /* Authenticated (logged-in) data via GQL with the user's OAuth token.  */
+    /* GQL uses the account identity (no OAuth scope enforcement), unlike    */
+    /* Helix which rejects this first-party client token.                   */
     /* ------------------------------------------------------------------ */
-
-    function helix(path, callback) {
-        if (typeof TwitchAuth === "undefined" || !TwitchAuth.isLoggedIn()) {
-            callback("Not logged in", null);
-            return;
-        }
-        TwitchAuth.ensureToken(function (ok) {
-            if (!ok) { callback("Session expired — please sign in again", null); return; }
-            var req = new XMLHttpRequest();
-            req.open("GET", "https://api.twitch.tv/helix/" + path, true);
-            req.timeout = 15000;
-            req.setRequestHeader("Client-Id", TwitchAuth.clientId());
-            req.setRequestHeader("Authorization", "Bearer " + TwitchAuth.token());
-            req.onreadystatechange = function () {
-                if (req.readyState === 4) {
-                    if (req.status >= 200 && req.status < 300) {
-                        var data = null;
-                        try { data = JSON.parse(req.responseText); } catch (e) { }
-                        callback(data ? null : "Invalid response from Twitch", data);
-                    } else {
-                        callback("HTTP " + req.status, null);
-                    }
-                }
-            };
-            req.ontimeout = function () { callback("Request timeout", null); };
-            req.onerror = function () { callback("Network error", null); };
-            req.send(null);
-        });
-    }
-
-    function helixThumb(url, w, h) {
-        if (!url) { return url; }
-        return url.replace("{width}", w).replace("{height}", h);
-    }
-
-    /* Maps a Helix stream object to the same shape our stream cards expect */
-    function mapHelixStream(s) {
-        return {
-            id: s.id,
-            title: s.title,
-            viewersCount: s.viewer_count,
-            previewImageURL: helixThumb(s.thumbnail_url, 440, 248),
-            game: { name: s.game_name, displayName: s.game_name },
-            broadcaster: { id: s.user_id, login: s.user_login, displayName: s.user_name }
-        };
-    }
 
     /* Live streams from channels the logged-in user follows */
     function followedStreams(cursor, callback) {
-        var after = cursor ? "&after=" + encodeURIComponent(cursor) : "";
-        helix("streams/followed?user_id=" + TwitchAuth.userId() + "&first=24" + after, function (err, data) {
+        gqlAuth("query { currentUser { followedLiveUsers(first: 40) { edges { node { id login displayName stream { id title viewersCount previewImageURL(width: 440, height: 248) game { name displayName } } } } } } }", function (err, data) {
             if (err) { callback(err, null); return; }
+            if (!data || !data.currentUser) { callback("Please sign in again", null); return; }
             var out = { items: [], cursor: null, hasNext: false };
-            var list = data.data || [];
-            for (var i = 0; i < list.length; i++) { out.items.push(mapHelixStream(list[i])); }
-            if (data.pagination && data.pagination.cursor) {
-                out.cursor = data.pagination.cursor;
-                out.hasNext = list.length > 0;
+            var conn = data.currentUser.followedLiveUsers;
+            var edges = conn && conn.edges ? conn.edges : [];
+            for (var i = 0; i < edges.length; i++) {
+                var n = edges[i].node;
+                if (n && n.stream) {
+                    out.items.push({
+                        id: n.stream.id,
+                        title: n.stream.title,
+                        viewersCount: n.stream.viewersCount,
+                        previewImageURL: n.stream.previewImageURL,
+                        game: n.stream.game || { name: "", displayName: "" },
+                        broadcaster: { id: n.id, login: n.login, displayName: n.displayName }
+                    });
+                }
             }
+            out.items.sort(function (a, b) { return b.viewersCount - a.viewersCount; });
             callback(null, out);
         });
     }
 
     /*
-     * "Recommended": top live streams across the games the user follows.
-     * Falls back to global top streams when the user follows no games.
+     * "Recommended": top live streams across the game categories the user
+     * follows (or, failing that, the categories their live follows are
+     * playing). Falls back to global top streams only as a last resort.
      */
     function recommendedStreams(callback) {
-        gqlAuth("query { currentUser { followedGames(first: 8, type: ALL) { nodes { name } } } }", function (err, data) {
+        gqlAuth("query { currentUser { followedGames(first: 8, type: ALL) { nodes { name } } followedLiveUsers(first: 40) { edges { node { stream { game { name } } } } } } }", function (err, data) {
+            var cu = data ? data.currentUser : null;
             var games = [];
-            if (!err && data && data.currentUser && data.currentUser.followedGames && data.currentUser.followedGames.nodes) {
-                var nodes = data.currentUser.followedGames.nodes;
-                for (var i = 0; i < nodes.length && i < 6; i++) {
-                    if (nodes[i] && nodes[i].name) { games.push(nodes[i].name); }
+            var seenGame = {};
+            function addGame(name) {
+                if (name && !seenGame[name] && games.length < 6) { seenGame[name] = true; games.push(name); }
+            }
+            if (cu && cu.followedGames && cu.followedGames.nodes) {
+                for (var i = 0; i < cu.followedGames.nodes.length; i++) {
+                    addGame(cu.followedGames.nodes[i] ? cu.followedGames.nodes[i].name : null);
+                }
+            }
+            if (games.length === 0 && cu && cu.followedLiveUsers && cu.followedLiveUsers.edges) {
+                var edges = cu.followedLiveUsers.edges;
+                for (var j = 0; j < edges.length; j++) {
+                    var s = edges[j].node && edges[j].node.stream;
+                    if (s && s.game) { addGame(s.game.name); }
                 }
             }
             if (games.length === 0) {
@@ -198,7 +176,8 @@ var Twitch = (function () {
             var req = new XMLHttpRequest();
             req.open("POST", GQL_URL, true);
             req.timeout = 15000;
-            req.setRequestHeader("Client-ID", CLIENT_IDS[clientIdx]);
+            /* Client-ID must match the token's client (the one it was issued for) */
+            req.setRequestHeader("Client-ID", TwitchAuth.clientId());
             req.setRequestHeader("Authorization", "OAuth " + TwitchAuth.token());
             req.setRequestHeader("Content-Type", "application/json");
             req.onreadystatechange = function () {
