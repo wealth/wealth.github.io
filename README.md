@@ -45,14 +45,16 @@ Everything is static files — host them on any web server.
 2. **Install "Media Station X"** from the LG Content Store on the TV.
 
 3. Open Media Station X → **Settings → Start Parameter → Setup**, and enter the location, without protocol:
-   - GitHub Pages: `<user>.github.io/<repo>` (choose the **security lock/https** option when asked)
+   - GitHub Pages: `<user>.github.io` (choose the **security lock/https** option when asked)
    - Local server: `192.168.x.x:8080` (your computer's IP)
 
    MSX then loads `<host>/msx/start.json` and starts the app.
 
-4. If your hosting path doesn't work with the automatic `{PREFIX}{SERVER}` placeholder, edit [msx/start.json](msx/start.json) and replace the parameter with the full absolute URL, e.g.:
+   **Note:** the MSX on-screen keyboard has no `/`, so the app must be hosted at the **root** of a host — use the GitHub Pages *user site* repo (named exactly `<user>.github.io`), not a project repo with a path.
+
+4. If you host somewhere else, edit [msx/start.json](msx/start.json) and set the parameter to the full absolute URL of `main.html` at your host, e.g.:
    ```json
-   "parameter": "menu:request:interaction:init@https://user.github.io/repo/main.html"
+   "parameter": "menu:request:interaction:init@https://your.host/main.html"
    ```
 
 ## Remote control quick reference

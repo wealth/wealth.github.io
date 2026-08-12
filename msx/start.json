@@ -1,7 +1,7 @@
 {
     "name": "Smart Twitch TV",
     "version": "1.1.0",
-    "parameter": "menu:request:interaction:init@https://wealth.github.io/smart-twitch-tv-msx/main.html",
+    "parameter": "menu:request:interaction:init@https://wealth.github.io/main.html",
     "welcome": "none",
     "launcher": {
         "icon": "live-tv",
