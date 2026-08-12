@@ -7,7 +7,7 @@ Inspired by [SmartTwitchTV](https://github.com/fgl27/smarttwitchtv) for Android.
 ## Features
 
 - **Chat overlay on video** — live Twitch chat rendered over the stream, with **7TV and BetterTTV emotes** (global + per-channel) plus native Twitch emotes, colored usernames, and flood protection
-  - **Switchable size** (Small / Medium / Large) and **position** (any corner) — both in Settings and live during playback
+  - **Position** (left / right), **height from bottom** (full / 75% / 50% / 25%), **width** (30–10% of screen), and **text size** — all switchable in Settings and live during playback
   - Anonymous IRC-over-WebSocket connection, no login needed
 - **Top streams** — browse the most-viewed live channels, with previews, viewer counts, and games
 - **Games** — top categories with box art; open a game to see its live streams
@@ -69,8 +69,10 @@ Everything is static files — host them on any web server.
 Bring up the player controls (OK / up) and select the **settings icon** (rightmost button) — it opens the chat options panel:
 
 - **Chat: On/Off** — toggle the overlay
-- **Chat size** — cycles Small → Medium → Large
-- **Chat position** — cycles Bottom left → Bottom right → Top left → Top right
+- **Position** — Left ↔ Right
+- **Height** — cycles Full → 75% → 50% → 25% (measured from the bottom)
+- **Width** — cycles 30% → 25% → 20% → 15% → 10% of the screen
+- **Text size** — cycles Small → Medium → Large
 
 Changes apply instantly and are remembered. The same options are available app-wide under **Settings** (chat defaults used for every stream).
 

@@ -16,8 +16,12 @@ var StvChat = (function () {
 
     var SIZES = { s: "Small", m: "Medium", l: "Large" };
     var SIZE_ORDER = ["s", "m", "l"];
-    var POSITIONS = { bl: "Bottom left", br: "Bottom right", tl: "Top left", tr: "Top right" };
-    var POS_ORDER = ["bl", "br", "tl", "tr"];
+    var POSITIONS = { l: "Left", r: "Right" };
+    var POS_ORDER = ["l", "r"];
+    var HEIGHTS = { full: "Full", h75: "75%", h50: "50%", h25: "25%" };
+    var HEIGHT_ORDER = ["full", "h75", "h50", "h25"];
+    var WIDTHS = { w30: "30%", w25: "25%", w20: "20%", w15: "15%", w10: "10%" };
+    var WIDTH_ORDER = ["w30", "w25", "w20", "w15", "w10"];
 
     var channel = null;
     var channelId = null;
@@ -45,10 +49,24 @@ var StvChat = (function () {
         try { window.localStorage.setItem("stv:" + key, value); } catch (e) { }
     }
 
+    function cycleValue(order, current) {
+        var idx = 0;
+        for (var i = 0; i < order.length; i++) {
+            if (order[i] === current) { idx = i; }
+        }
+        return order[(idx + 1) % order.length];
+    }
+
     function isEnabled() { return getStore("chat", "on") === "on"; }
     function getSize() { var v = getStore("chatsize", "m"); return SIZES[v] ? v : "m"; }
-    function getPos() { var v = getStore("chatpos", "bl"); return POSITIONS[v] ? v : "bl"; }
-    function isTopPos() { return getPos().charAt(0) === "t"; }
+    function getPos() {
+        var v = getStore("chatpos", "l");
+        if (POSITIONS[v]) { return v; }
+        /* migrate pre-1.2.0 corner values (bl/br/tl/tr) */
+        return v.indexOf("r") >= 0 ? "r" : "l";
+    }
+    function getHeight() { var v = getStore("chatheight", "h50"); return HEIGHTS[v] ? v : "h50"; }
+    function getWidth() { var v = getStore("chatwidth", "w30"); return WIDTHS[v] ? v : "w30"; }
 
     /* ------------------------------------------------------------------ */
     /* DOM                                                                */
@@ -56,7 +74,8 @@ var StvChat = (function () {
 
     function applyStyle() {
         if (container == null) { return; }
-        container.className = "stv-chat size-" + getSize() + " pos-" + getPos();
+        container.className = "stv-chat size-" + getSize() + " pos-" + getPos() +
+            " " + getHeight() + " " + getWidth();
     }
 
     function ensureContainer() {
@@ -79,17 +98,9 @@ var StvChat = (function () {
         var node = document.createElement("div");
         node.className = "stv-msg";
         node.innerHTML = html;
-        if (isTopPos()) {
-            /* newest message pinned to the top edge */
-            container.insertBefore(node, container.firstChild);
-            while (container.childNodes.length > MAX_MESSAGES) {
-                container.removeChild(container.lastChild);
-            }
-        } else {
-            container.appendChild(node);
-            while (container.childNodes.length > MAX_MESSAGES) {
-                container.removeChild(container.firstChild);
-            }
+        container.appendChild(node);
+        while (container.childNodes.length > MAX_MESSAGES) {
+            container.removeChild(container.firstChild);
         }
     }
 
@@ -407,27 +418,28 @@ var StvChat = (function () {
             }
         },
         cycleSize: function () {
-            var idx = 0;
-            for (var i = 0; i < SIZE_ORDER.length; i++) {
-                if (SIZE_ORDER[i] === getSize()) { idx = i; }
-            }
-            setStore("chatsize", SIZE_ORDER[(idx + 1) % SIZE_ORDER.length]);
+            setStore("chatsize", cycleValue(SIZE_ORDER, getSize()));
             applyStyle();
         },
         cyclePos: function () {
-            var idx = 0;
-            for (var i = 0; i < POS_ORDER.length; i++) {
-                if (POS_ORDER[i] === getPos()) { idx = i; }
-            }
-            setStore("chatpos", POS_ORDER[(idx + 1) % POS_ORDER.length]);
+            setStore("chatpos", cycleValue(POS_ORDER, getPos()));
             applyStyle();
-            clearMessages();
+        },
+        cycleHeight: function () {
+            setStore("chatheight", cycleValue(HEIGHT_ORDER, getHeight()));
+            applyStyle();
+        },
+        cycleWidth: function () {
+            setStore("chatwidth", cycleValue(WIDTH_ORDER, getWidth()));
+            applyStyle();
         },
         stateLabels: function () {
             return {
                 enabled: isEnabled() ? "On" : "Off",
                 size: SIZES[getSize()],
-                pos: POSITIONS[getPos()]
+                pos: POSITIONS[getPos()],
+                height: HEIGHTS[getHeight()],
+                width: WIDTHS[getWidth()]
             };
         }
     };

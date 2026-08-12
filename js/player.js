@@ -121,8 +121,10 @@ function HlsPlayer() {
             var labels = StvChat.stateLabels();
             items.push(chatOptionItem("chat", "Chat: " + labels.enabled, "chat:toggle"));
             if (StvChat.isEnabled()) {
-                items.push(chatOptionItem("format-size", "Chat size: " + labels.size, "chat:size"));
-                items.push(chatOptionItem("picture-in-picture-alt", "Chat position: " + labels.pos, "chat:pos"));
+                items.push(chatOptionItem("swap-horiz", "Position: " + labels.pos, "chat:pos"));
+                items.push(chatOptionItem("unfold-more", "Height: " + labels.height, "chat:height"));
+                items.push(chatOptionItem("settings-ethernet", "Width: " + labels.width, "chat:width"));
+                items.push(chatOptionItem("format-size", "Text size: " + labels.size, "chat:size"));
             }
         } else {
             items.push({ enable: false, label: "No options available" });
@@ -148,6 +150,10 @@ function HlsPlayer() {
             StvChat.cycleSize();
         } else if (message === "chat:pos") {
             StvChat.cyclePos();
+        } else if (message === "chat:height") {
+            StvChat.cycleHeight();
+        } else if (message === "chat:width") {
+            StvChat.cycleWidth();
         } else {
             return;
         }

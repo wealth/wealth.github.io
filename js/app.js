@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.1.0";
+    var VERSION = "1.2.0";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -598,10 +598,23 @@
     ];
 
     var CHAT_POS_OPTIONS = [
-        { value: "bl", label: "Bottom left" },
-        { value: "br", label: "Bottom right" },
-        { value: "tl", label: "Top left" },
-        { value: "tr", label: "Top right" }
+        { value: "l", label: "Left" },
+        { value: "r", label: "Right" }
+    ];
+
+    var CHAT_HEIGHT_OPTIONS = [
+        { value: "full", label: "Full" },
+        { value: "h75", label: "75%" },
+        { value: "h50", label: "50%" },
+        { value: "h25", label: "25%" }
+    ];
+
+    var CHAT_WIDTH_OPTIONS = [
+        { value: "w30", label: "30%" },
+        { value: "w25", label: "25%" },
+        { value: "w20", label: "20%" },
+        { value: "w15", label: "15%" },
+        { value: "w10", label: "10%" }
     ];
 
     function radioItems(options, storeKey, current) {
@@ -618,6 +631,13 @@
         return flowPages(items, 4, 1, null)[0].items;
     }
 
+    /* Migrates pre-1.2.0 corner values (bl/br/tl/tr) to l/r */
+    function chatPos() {
+        var v = store.get("chatpos", "l");
+        if (v === "l" || v === "r") { return v; }
+        return v.indexOf("r") >= 0 ? "r" : "l";
+    }
+
     function settingsRoot() {
         return {
             type: "list",
@@ -626,8 +646,10 @@
             refocus: true,
             pages: [
                 { headline: "Chat overlay (also switchable during playback via player options)", items: radioItems(CHAT_OPTIONS, "chat", store.get("chat", "on")) },
-                { headline: "Chat size", items: radioItems(CHAT_SIZE_OPTIONS, "chatsize", store.get("chatsize", "m")) },
-                { headline: "Chat position", items: radioItems(CHAT_POS_OPTIONS, "chatpos", store.get("chatpos", "bl")) },
+                { headline: "Chat position", items: radioItems(CHAT_POS_OPTIONS, "chatpos", chatPos()) },
+                { headline: "Chat height (from bottom)", items: radioItems(CHAT_HEIGHT_OPTIONS, "chatheight", store.get("chatheight", "h50")) },
+                { headline: "Chat width", items: radioItems(CHAT_WIDTH_OPTIONS, "chatwidth", store.get("chatwidth", "w30")) },
+                { headline: "Chat text size", items: radioItems(CHAT_SIZE_OPTIONS, "chatsize", store.get("chatsize", "m")) },
                 { headline: "Stream quality", items: radioItems(QUALITY_OPTIONS, "quality", store.get("quality", "auto")) },
                 { headline: "Player for chatless playback (switch if playback fails)", items: radioItems(PLAYER_OPTIONS, "player", store.get("player", "default")) }
             ]
