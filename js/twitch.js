@@ -78,6 +78,146 @@ var Twitch = (function () {
         gql({ query: q }, callback);
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Authenticated (logged-in) data via official Helix API              */
+    /* ------------------------------------------------------------------ */
+
+    function helix(path, callback) {
+        if (typeof TwitchAuth === "undefined" || !TwitchAuth.isLoggedIn()) {
+            callback("Not logged in", null);
+            return;
+        }
+        TwitchAuth.ensureToken(function (ok) {
+            if (!ok) { callback("Session expired — please sign in again", null); return; }
+            var req = new XMLHttpRequest();
+            req.open("GET", "https://api.twitch.tv/helix/" + path, true);
+            req.timeout = 15000;
+            req.setRequestHeader("Client-Id", TwitchAuth.clientId());
+            req.setRequestHeader("Authorization", "Bearer " + TwitchAuth.token());
+            req.onreadystatechange = function () {
+                if (req.readyState === 4) {
+                    if (req.status >= 200 && req.status < 300) {
+                        var data = null;
+                        try { data = JSON.parse(req.responseText); } catch (e) { }
+                        callback(data ? null : "Invalid response from Twitch", data);
+                    } else {
+                        callback("HTTP " + req.status, null);
+                    }
+                }
+            };
+            req.ontimeout = function () { callback("Request timeout", null); };
+            req.onerror = function () { callback("Network error", null); };
+            req.send(null);
+        });
+    }
+
+    function helixThumb(url, w, h) {
+        if (!url) { return url; }
+        return url.replace("{width}", w).replace("{height}", h);
+    }
+
+    /* Maps a Helix stream object to the same shape our stream cards expect */
+    function mapHelixStream(s) {
+        return {
+            id: s.id,
+            title: s.title,
+            viewersCount: s.viewer_count,
+            previewImageURL: helixThumb(s.thumbnail_url, 440, 248),
+            game: { name: s.game_name, displayName: s.game_name },
+            broadcaster: { id: s.user_id, login: s.user_login, displayName: s.user_name }
+        };
+    }
+
+    /* Live streams from channels the logged-in user follows */
+    function followedStreams(cursor, callback) {
+        var after = cursor ? "&after=" + encodeURIComponent(cursor) : "";
+        helix("streams/followed?user_id=" + TwitchAuth.userId() + "&first=24" + after, function (err, data) {
+            if (err) { callback(err, null); return; }
+            var out = { items: [], cursor: null, hasNext: false };
+            var list = data.data || [];
+            for (var i = 0; i < list.length; i++) { out.items.push(mapHelixStream(list[i])); }
+            if (data.pagination && data.pagination.cursor) {
+                out.cursor = data.pagination.cursor;
+                out.hasNext = list.length > 0;
+            }
+            callback(null, out);
+        });
+    }
+
+    /*
+     * "Recommended": top live streams across the games the user follows.
+     * Falls back to global top streams when the user follows no games.
+     */
+    function recommendedStreams(callback) {
+        gqlAuth("query { currentUser { followedGames(first: 8, type: ALL) { nodes { name } } } }", function (err, data) {
+            var games = [];
+            if (!err && data && data.currentUser && data.currentUser.followedGames && data.currentUser.followedGames.nodes) {
+                var nodes = data.currentUser.followedGames.nodes;
+                for (var i = 0; i < nodes.length && i < 6; i++) {
+                    if (nodes[i] && nodes[i].name) { games.push(nodes[i].name); }
+                }
+            }
+            if (games.length === 0) {
+                topStreams(null, callback);
+                return;
+            }
+            var aliases = [];
+            for (var g = 0; g < games.length; g++) {
+                aliases.push("g" + g + ": game(name: " + lit(games[g]) + ") { streams(first: 6) { edges { node { " + STREAM_FIELDS + " } } } }");
+            }
+            gqlAuth("query { " + aliases.join(" ") + " }", function (err2, data2) {
+                if (err2 || !data2) { topStreams(null, callback); return; }
+                var seen = {};
+                var items = [];
+                for (var k = 0; k < games.length; k++) {
+                    var gd = data2["g" + k];
+                    if (gd && gd.streams && gd.streams.edges) {
+                        for (var e = 0; e < gd.streams.edges.length; e++) {
+                            var node = gd.streams.edges[e].node;
+                            if (node && node.broadcaster && !seen[node.broadcaster.login]) {
+                                seen[node.broadcaster.login] = true;
+                                items.push(node);
+                            }
+                        }
+                    }
+                }
+                items.sort(function (a, b) { return b.viewersCount - a.viewersCount; });
+                callback(null, { items: items, cursor: null, hasNext: false });
+            });
+        });
+    }
+
+    /* GQL request carrying the user's OAuth token (personalized data) */
+    function gqlAuth(q, callback) {
+        if (typeof TwitchAuth === "undefined" || !TwitchAuth.isLoggedIn()) {
+            callback("Not logged in", null);
+            return;
+        }
+        TwitchAuth.ensureToken(function (ok) {
+            if (!ok) { callback("Session expired", null); return; }
+            var req = new XMLHttpRequest();
+            req.open("POST", GQL_URL, true);
+            req.timeout = 15000;
+            req.setRequestHeader("Client-ID", CLIENT_IDS[clientIdx]);
+            req.setRequestHeader("Authorization", "OAuth " + TwitchAuth.token());
+            req.setRequestHeader("Content-Type", "application/json");
+            req.onreadystatechange = function () {
+                if (req.readyState === 4) {
+                    if (req.status >= 200 && req.status < 300) {
+                        var data = null;
+                        try { data = JSON.parse(req.responseText); } catch (e) { }
+                        callback(data && data.data ? null : "Invalid response", data ? data.data : null);
+                    } else {
+                        callback("HTTP " + req.status, null);
+                    }
+                }
+            };
+            req.ontimeout = function () { callback("Request timeout", null); };
+            req.onerror = function () { callback("Network error", null); };
+            req.send(JSON.stringify({ query: q }));
+        });
+    }
+
     /* String literal for safe inline embedding into a GQL query */
     function lit(str) {
         return JSON.stringify(String(str));
@@ -281,6 +421,8 @@ var Twitch = (function () {
     return {
         topStreams: topStreams,
         topGames: topGames,
+        followedStreams: followedStreams,
+        recommendedStreams: recommendedStreams,
         streamStats: streamStats,
         gameStreams: gameStreams,
         channel: channel,

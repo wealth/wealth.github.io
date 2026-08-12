@@ -6,6 +6,9 @@ Inspired by [SmartTwitchTV](https://github.com/fgl27/smarttwitchtv) for Android.
 
 ## Features
 
+- **Optional Twitch account login** — connect your account to see the channels **you follow** (live) and **recommended** streams
+  - Sign-in uses Twitch's official **device code flow**: the TV shows a short code, you enter it at [twitch.tv/activate](https://www.twitch.tv/activate) on your phone or computer — no typing a password on the TV
+  - Read-only (`user:read:follows` scope); browsing/search/favorites/playback all still work without logging in
 - **Chat overlay on video** — live Twitch chat rendered over the stream, with **7TV and BetterTTV emotes** (global + per-channel) plus native Twitch emotes, colored usernames, and flood protection
   - **Position** (left / right), **height from bottom** (full / 75% / 50% / 25%), **width** (30–10% of screen), and **text size** — all switchable in Settings and live during playback
   - **Live viewer count** at the top of the chat (refreshed every minute; Twitch locks the chatters-only count behind bot protection, so viewers is shown)
@@ -25,8 +28,9 @@ Inspired by [SmartTwitchTV](https://github.com/fgl27/smarttwitchtv) for Android.
 ```
 msx/start.json   MSX start parameter file (entry point)
 main.html        Interaction plugin (the app shell MSX loads)
-js/twitch.js     Twitch API layer (GQL queries, playback tokens, HLS URL handling)
-js/app.js        UI: menu, pages, cards, search, favorites, settings, playback
+js/auth.js       Twitch account login (OAuth device code flow)
+js/twitch.js     Twitch API layer (public GQL + Helix for logged-in data)
+js/app.js        UI: menu, pages, cards, search, favorites, login, settings, playback
 player.html      Video player page with the chat overlay (native HLS + hls.js fallback)
 js/player.js     Player logic (video + chat options panel)
 js/chat.js       Chat overlay: Twitch IRC over WebSocket, 7TV/BTTV/Twitch emotes
@@ -58,6 +62,15 @@ Everything is static files — host them on any web server.
    ```json
    "parameter": "menu:request:interaction:init@https://your.host/main.html"
    ```
+
+## Signing in
+
+Open **Connect account** in the menu. The TV shows a code; go to [twitch.tv/activate](https://www.twitch.tv/activate) on any device, sign in to Twitch, and enter the code. The TV picks it up automatically and adds **Following** and **Recommended** to the menu. Your session is remembered; **Log out** is under the account menu item.
+
+Notes:
+- Uses the same anonymous public Twitch client the web player uses, so no app registration is needed. Login is standard OAuth; the app only requests permission to read who you follow.
+- **Following** shows channels you follow that are **live right now**. **Recommended** = top live streams across the game categories you follow (falls back to global top streams if you follow no categories).
+- If your session can't be refreshed (Twitch expires it), the app quietly signs you out — just connect again.
 
 ## Remote control quick reference
 

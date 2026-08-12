@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.4.0";
+    var VERSION = "1.5.0";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -284,6 +284,12 @@
         if (key === "games") {
             return { headline: "Top games", template: GAME_TEMPLATE };
         }
+        if (key === "following") {
+            return { headline: "Following", template: STREAM_TEMPLATE, empty: "None of the channels you follow are live right now." };
+        }
+        if (key === "recommended") {
+            return { headline: "Recommended", template: STREAM_TEMPLATE };
+        }
         /* key = "game:<encoded name>" */
         return { headline: decodeURIComponent(key.substring(5)), template: STREAM_TEMPLATE };
     }
@@ -304,6 +310,10 @@
             Twitch.topStreams(sec.cursor, accept(streamCard));
         } else if (key === "games") {
             Twitch.topGames(sec.cursor, accept(gameCard));
+        } else if (key === "following") {
+            Twitch.followedStreams(sec.cursor, accept(streamCard));
+        } else if (key === "recommended") {
+            Twitch.recommendedStreams(accept(streamCard));
         } else {
             Twitch.gameStreams(decodeURIComponent(key.substring(5)), sec.cursor, accept(streamCard));
         }
@@ -311,6 +321,22 @@
 
     function buildSectionRoot(key, sec) {
         var meta = sectionMeta(key);
+        if (sec.cards.length === 0 && meta.empty) {
+            return {
+                type: "pages",
+                headline: meta.headline,
+                cache: false,
+                pages: [{
+                    items: [{
+                        type: "default",
+                        layout: "2,2,8,2",
+                        color: "msx-glass",
+                        icon: "info",
+                        text: meta.empty
+                    }]
+                }]
+            };
+        }
         var items = sec.cards.slice(0);
         if (sec.hasNext) { items.push(moreItem(key)); }
         return {
@@ -701,7 +727,8 @@
                         "Inspired by SmartTwitchTV for Android (github.com/fgl27/smarttwitchtv).",
                         "",
                         "Browse top streams and games, search, keep favorites, and watch live streams and recent videos.",
-                        "Uses the public Twitch API — no login required. Not affiliated with Twitch or Amazon.",
+                        "Optionally sign in to see channels you follow and recommended streams.",
+                        "Uses the public Twitch API. Not affiliated with Twitch or Amazon.",
                         "",
                         "Tip: if playback does not start on your TV, switch the player in Settings."
                     ].join("{br}")
@@ -801,20 +828,162 @@
     /* ------------------------------------------------------------------ */
 
     function menuRoot() {
+        var menu = [];
+        var loggedIn = typeof TwitchAuth !== "undefined" && TwitchAuth.isLoggedIn();
+        if (loggedIn) {
+            menu.push({ icon: "favorite", label: "Following", data: req("following") });
+            menu.push({ icon: "recommend", label: "Recommended", data: req("recommended") });
+            menu.push({ type: "separator" });
+        }
+        menu.push({ icon: "live-tv", label: "Top streams", data: req("streams") });
+        menu.push({ icon: "videogame-asset", label: "Games", data: req("games") });
+        menu.push({ icon: "search", label: "Search", data: req("search") });
+        menu.push({ icon: "star", label: "Favorites", data: req("favorites") });
+        menu.push({ type: "separator" });
+        if (loggedIn) {
+            menu.push({ icon: "account-circle", label: TwitchAuth.displayName(), data: req("account") });
+        } else {
+            menu.push({ icon: "account-circle", label: "Connect account", data: req("login") });
+        }
+        menu.push({ icon: "tune", label: "Settings", data: req("settings") });
+        menu.push({ icon: "info", label: "About", data: req("about") });
         return {
             name: "Smart Twitch TV",
             version: VERSION,
             headline: "Smart Twitch TV",
             refocus: true,
-            menu: [
-                { icon: "live-tv", label: "Top streams", data: req("streams") },
-                { icon: "videogame-asset", label: "Games", data: req("games") },
-                { icon: "search", label: "Search", data: req("search") },
-                { icon: "star", label: "Favorites", data: req("favorites") },
-                { type: "separator" },
-                { icon: "tune", label: "Settings", data: req("settings") },
-                { icon: "info", label: "About", data: req("about") }
-            ]
+            menu: menu
+        };
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Account login (OAuth device flow)                                  */
+    /* ------------------------------------------------------------------ */
+
+    var loginState = null;
+
+    function beginLogin() {
+        loginState = { status: "starting" };
+        TwitchAuth.startDeviceLogin(function (info) {
+            loginState = { status: "code", code: info.user_code, uri: info.verification_uri };
+            TVXInteractionPlugin.executeAction("reload:content");
+        }, function (result) {
+            if (result === "success") {
+                loginState = { status: "success" };
+                TVXInteractionPlugin.executeAction("reload:menu");
+                TVXInteractionPlugin.executeAction("reload:content");
+                TVXInteractionPlugin.executeAction("success:Signed in as " + (TwitchAuth.displayName() || "Twitch"));
+            } else {
+                loginState = { status: result === "expired" ? "expired" : "error" };
+                TVXInteractionPlugin.executeAction("reload:content");
+            }
+        });
+    }
+
+    function loginRoot(callback) {
+        if (TwitchAuth.isLoggedIn()) { callback(accountRoot()); return; }
+        if (loginState == null || loginState.status === "expired" || loginState.status === "error") {
+            beginLogin();
+        }
+        var st = loginState || { status: "starting" };
+        var page;
+        if (st.status === "code") {
+            callback({
+                type: "pages",
+                headline: "Connect account",
+                cache: false,
+                pages: [{
+                    items: [
+                        {
+                            type: "default",
+                            layout: "1,1,10,1",
+                            enable: false,
+                            text: "On your phone or computer, open {col:msx-white}https://www.twitch.tv/activate{col} and enter this code:"
+                        },
+                        {
+                            type: "default",
+                            layout: "3,2,6,2",
+                            color: "msx-glass",
+                            headline: "{col:msx-white}" + st.code + "{col}",
+                            text: "{ico:hourglass-empty} Waiting for you to authorize on Twitch…"
+                        }
+                    ]
+                }]
+            });
+            return;
+        } else if (st.status === "success") {
+            page = {
+                headline: "Signed in",
+                text: "{ico:check-circle} Signed in as {txt:msx-bold:" + (TwitchAuth.displayName() || "Twitch") + "}",
+                button: { label: "{ico:favorite} Show Following", action: creq("following") }
+            };
+        } else if (st.status === "expired") {
+            page = {
+                headline: "Code expired",
+                text: "The code expired before it was entered.",
+                button: { label: "{ico:refresh} Try again", action: creq("login") }
+            };
+        } else if (st.status === "error") {
+            page = {
+                headline: "Could not connect",
+                text: "Something went wrong reaching Twitch. Please try again.",
+                button: { label: "{ico:refresh} Try again", action: creq("login") }
+            };
+        } else {
+            page = { headline: "Connecting…", text: "{ico:hourglass-empty} Contacting Twitch…" };
+        }
+        var items = [{
+            type: "default",
+            layout: "1,1,10,3",
+            color: "msx-glass",
+            headline: page.headline,
+            text: page.text
+        }];
+        if (page.button) {
+            items.push({
+                type: "button",
+                layout: "1,4,4,1",
+                label: page.button.label,
+                action: page.button.action
+            });
+        }
+        callback({
+            type: "pages",
+            headline: "Connect account",
+            cache: false,
+            pages: [{ items: items }]
+        });
+    }
+
+    function accountRoot() {
+        return {
+            type: "pages",
+            headline: "Account",
+            cache: false,
+            pages: [{
+                items: [
+                    {
+                        type: "default",
+                        layout: "1,1,10,2",
+                        color: "msx-glass",
+                        headline: "{ico:account-circle} " + TwitchAuth.displayName(),
+                        text: "Signed in to Twitch. Your followed and recommended streams are in the menu."
+                    },
+                    {
+                        type: "button",
+                        layout: "1,3,4,1",
+                        label: "{ico:favorite} Following",
+                        action: creq("following")
+                    },
+                    {
+                        type: "button",
+                        layout: "5,3,4,1",
+                        label: "{ico:exit-to-app} Log out",
+                        action: "interaction:commit",
+                        data: { action: "logout" }
+                    }
+                ]
+            }]
         };
     }
 
@@ -845,6 +1014,13 @@
             } else if (d.action === "set") {
                 store.set(d.key, d.value);
                 TVXInteractionPlugin.executeAction("reload:content");
+            } else if (d.action === "logout") {
+                TwitchAuth.logout();
+                delete sections.following;
+                delete sections.recommended;
+                TVXInteractionPlugin.executeAction("reload:menu");
+                TVXInteractionPlugin.executeAction("menu:request:interaction:streams@" + PLUGIN_URL);
+                TVXInteractionPlugin.executeAction("info:Logged out");
             }
         },
         handleRequest: function (dataId, data, callback) {
@@ -854,7 +1030,7 @@
                 var arg = sep < 0 ? null : dataId.substring(sep + 1);
                 if (cmd === "init") {
                     callback(menuRoot());
-                } else if (cmd === "streams" || cmd === "games") {
+                } else if (cmd === "streams" || cmd === "games" || cmd === "following" || cmd === "recommended") {
                     sectionContent(cmd, callback);
                 } else if (cmd === "game" && arg) {
                     sectionContent("game:" + arg, callback);
@@ -864,6 +1040,10 @@
                     callback(buildSearchRoot());
                 } else if (cmd === "favorites") {
                     favoritesRoot(callback);
+                } else if (cmd === "login") {
+                    loginRoot(callback);
+                } else if (cmd === "account") {
+                    callback(accountRoot());
                 } else if (cmd === "settings") {
                     callback(settingsRoot());
                 } else if (cmd === "about") {
