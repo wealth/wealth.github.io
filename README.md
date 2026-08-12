@@ -1,0 +1,88 @@
+# Smart Twitch TV for Media Station X
+
+An unofficial Twitch client that runs inside [Media Station X](https://msx.benzac.de/info/) on LG webOS TVs (and any other platform MSX supports — Samsung Tizen, Android TV, Fire TV, etc.).
+
+Inspired by [SmartTwitchTV](https://github.com/fgl27/smarttwitchtv) for Android. This is a from-scratch web port for the MSX platform — no Android code involved.
+
+## Features
+
+- **Top streams** — browse the most-viewed live channels, with previews, viewer counts, and games
+- **Games** — top categories with box art; open a game to see its live streams
+- **Search** — on-screen keyboard (remote-friendly), finds channels and games as you type
+- **Channel pages** — live preview, stream title, game, uptime, follower count, watch button
+- **Recent videos (VODs)** — play past broadcasts of any channel
+- **Favorites** — your own followed-channels list, stored on the TV, live channels sorted first (no Twitch login needed)
+- **Settings** — preferred stream quality and player selection
+- Uses Twitch's public GQL API anonymously — no login, no API key, no backend server. All requests go directly from the TV to Twitch.
+
+## Repository layout
+
+```
+msx/start.json   MSX start parameter file (entry point)
+main.html        Interaction plugin (the app shell MSX loads)
+js/twitch.js     Twitch API layer (GQL queries, playback tokens, HLS URL handling)
+js/app.js        UI: menu, pages, cards, search, favorites, settings, playback
+player.html      Optional fallback video player (hls.js based)
+js/player.js     Fallback player logic
+```
+
+Everything is static files — host them on any web server.
+
+## Setup on an LG TV (webOS)
+
+1. **Host these files** somewhere the TV can reach:
+   - **GitHub Pages (easiest):** push this repo to GitHub, enable Pages. Your app lives at `https://<user>.github.io/<repo>/`.
+   - **Local server on your LAN:**
+     ```
+     npx http-server /path/to/smart-twitch-tv-msx -p 8080 --cors
+     ```
+     (Any static server works; CORS headers are recommended so the MSX app can fetch `start.json`.)
+
+2. **Install "Media Station X"** from the LG Content Store on the TV.
+
+3. Open Media Station X → **Settings → Start Parameter → Setup**, and enter the location, without protocol:
+   - GitHub Pages: `<user>.github.io/<repo>` (choose the **security lock/https** option when asked)
+   - Local server: `192.168.x.x:8080` (your computer's IP)
+
+   MSX then loads `<host>/msx/start.json` and starts the app.
+
+4. If your hosting path doesn't work with the automatic `{PREFIX}{SERVER}` placeholder, edit [msx/start.json](msx/start.json) and replace the parameter with the full absolute URL, e.g.:
+   ```json
+   "parameter": "menu:request:interaction:init@https://user.github.io/repo/main.html"
+   ```
+
+## Remote control quick reference
+
+- **OK** on a stream card → channel page; **OK** on the preview or "Watch live" → play
+- **Channel up/down** (or left/right at the edge) → flip between content pages (e.g. channel info → recent videos)
+- **Back** → previous page / stop playback
+- **Add favorite** on a channel page → channel appears under Favorites
+
+## Settings notes
+
+- **Stream quality** — `Auto` hands Twitch's adaptive master playlist to the player (recommended on TVs). Fixed qualities (Source/720p/…) require reading the playlist from the TV browser; on platforms where Twitch's CDN blocks that (CORS), playback silently falls back to Auto.
+- **Player** — `TV player` uses the TV's native HLS support via MSX (recommended on webOS). `HLS.js player` is a bundled fallback ([player.html](player.html)) for platforms without native HLS. Note: desktop browsers can't fetch Twitch streams at all due to Twitch CDN CORS policy — that's a Twitch restriction, not a bug; on TVs the native player is unaffected.
+
+## Testing in a desktop browser
+
+The MSX web shell can run the app on your computer:
+
+```
+https://msx.benzac.de/?start=menu:request:interaction:init@https://<your-host>/main.html
+```
+
+The plugin URL must be **https** (the shell upgrades http URLs). For localhost you'll need a self-signed certificate and to accept it in the browser first. Browsing, search, and favorites fully work on desktop; **video playback works only on real TVs** (Twitch's CDN only allows twitch.tv web origins to read streams via JavaScript — TVs play them natively instead).
+
+## If Twitch requests start failing
+
+Twitch occasionally rotates its public web Client-ID. The app tries several known IDs automatically (see `CLIENT_IDS` in [js/twitch.js](js/twitch.js)). If all of them stop working, grab the current one:
+
+```
+curl -s https://www.twitch.tv/ | grep -oE 'clientId="[^"]+"'
+```
+
+and put it first in the `CLIENT_IDS` array.
+
+## Disclaimer
+
+Unofficial hobby project. Not affiliated with, endorsed by, or supported by Twitch Interactive, Amazon, LG, or Media Station X. Uses the publicly reachable Twitch API the same way a web browser does; no ads are removed and no paywalls are bypassed. Credits: [fgl27/smarttwitchtv](https://github.com/fgl27/smarttwitchtv) for the inspiration, [Benjamin Zachey](https://msx.benzac.de/info/) for Media Station X, [hls.js](https://github.com/video-dev/hls.js) for the fallback player.
