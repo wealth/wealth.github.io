@@ -17,7 +17,8 @@ var Twitch = (function () {
     ];
     var GQL_URL = "https://gql.twitch.tv/gql";
     var USHER_BASE = "https://usher.ttvnw.net";
-    var TOKEN_HASH = "0828119ded1c13477966434e15800ff57ddacf13ba1911c129dc2200705b0712";
+    /* Full PlaybackAccessToken query (inline; no persisted-hash dependency) */
+    var PLAYBACK_QUERY = 'query PlaybackAccessToken_Template($login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!, $platform: String!) { streamPlaybackAccessToken(channelName: $login, params: {platform: $platform, playerBackend: "mediaplayer", playerType: $playerType}) @include(if: $isLive) { value signature __typename } videoPlaybackAccessToken(id: $vodID, params: {platform: $platform, playerBackend: "mediaplayer", playerType: $playerType}) @include(if: $isVod) { value signature __typename }}';
 
     var clientIdx = 0;
 
@@ -325,16 +326,22 @@ var Twitch = (function () {
 
     function playbackToken(login, vodId, callback) {
         var isVod = vodId != null;
+        /*
+         * Send the FULL query text (not a persisted-query hash). Twitch
+         * periodically purges old persisted hashes → "PersistedQueryNotFound";
+         * the inline query never depends on a pre-registered hash.
+         */
         gql({
-            operationName: "PlaybackAccessToken",
+            operationName: "PlaybackAccessToken_Template",
+            query: PLAYBACK_QUERY,
             variables: {
                 isLive: !isVod,
                 login: isVod ? "" : login,
                 isVod: isVod,
                 vodID: isVod ? String(vodId) : "",
-                playerType: "site"
-            },
-            extensions: { persistedQuery: { version: 1, sha256Hash: TOKEN_HASH } }
+                playerType: "site",
+                platform: "web"
+            }
         }, function (err, data) {
             if (err) { callback(err, null); return; }
             var token = isVod ? data.videoPlaybackAccessToken : data.streamPlaybackAccessToken;
