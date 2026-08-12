@@ -16,6 +16,39 @@ function HlsPlayer() {
     var videoUrl = null;
     var nativeTried = false;
     var hlsTried = false;
+    var statsChannel = null;
+    var statsTimer = null;
+
+    /* ------------------------------------------------------------------ */
+    /* Live stream stats: viewers (chat header) + uptime (OSD label)      */
+    /* ------------------------------------------------------------------ */
+
+    function fmtUptime(iso) {
+        var start = new Date(iso).getTime();
+        if (!start) { return null; }
+        var mins = Math.floor(Math.max(0, new Date().getTime() - start) / 60000);
+        var h = Math.floor(mins / 60);
+        var m = mins % 60;
+        return h > 0 ? h + "h " + (m < 10 ? "0" + m : m) + "m" : m + "m";
+    }
+
+    function updateStats() {
+        if (statsChannel == null || typeof Twitch === "undefined") { return; }
+        Twitch.streamStats(statsChannel, function (err, stream) {
+            if (err || stream == null) { return; }
+            StvChat.setViewers(stream.viewersCount);
+            var uptime = stream.createdAt ? fmtUptime(stream.createdAt) : null;
+            if (uptime != null) {
+                TVXVideoPlugin.setupExtensionLabel("{ico:msx-white:schedule} " + uptime);
+            }
+        });
+    }
+
+    function startStats(channel) {
+        statsChannel = channel;
+        updateStats();
+        statsTimer = setInterval(updateStats, 60000);
+    }
 
     function canUseHlsJs() {
         return typeof Hls !== "undefined" && Hls.isSupported();
@@ -192,6 +225,7 @@ function HlsPlayer() {
             setupVideo(url);
             if (TVXTools.isFullStr(channel)) {
                 StvChat.init(channel, cid);
+                startStats(channel);
             }
         } else {
             TVXVideoPlugin.warn("Video URL is missing");
@@ -201,6 +235,10 @@ function HlsPlayer() {
 
     this.dispose = function () {
         StvChat.dispose();
+        if (statsTimer != null) {
+            clearInterval(statsTimer);
+            statsTimer = null;
+        }
         if (hls != null) {
             try { hls.destroy(); } catch (e) { }
             hls = null;

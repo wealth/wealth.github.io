@@ -8,7 +8,9 @@ Inspired by [SmartTwitchTV](https://github.com/fgl27/smarttwitchtv) for Android.
 
 - **Chat overlay on video** — live Twitch chat rendered over the stream, with **7TV and BetterTTV emotes** (global + per-channel) plus native Twitch emotes, colored usernames, and flood protection
   - **Position** (left / right), **height from bottom** (full / 75% / 50% / 25%), **width** (30–10% of screen), and **text size** — all switchable in Settings and live during playback
+  - **Live viewer count** at the top of the chat (refreshed every minute; Twitch locks the chatters-only count behind bot protection, so viewers is shown)
   - Anonymous IRC-over-WebSocket connection, no login needed
+- **Player controls show the stream title** (not just the streamer name) and the **total stream uptime** in the corner, ticking live
 - **Top streams** — browse the most-viewed live channels, with previews, viewer counts, and games
 - **Games** — top categories with box art; open a game to see its live streams
 - **Search** — on-screen keyboard (remote-friendly), finds channels and games as you type

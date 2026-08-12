@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.2.0";
+    var VERSION = "1.3.0";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -359,7 +359,7 @@
             };
             if (live) {
                 preview.action = "interaction:commit";
-                preview.data = { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login };
+                preview.data = { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login, title: s.title };
             }
 
             var page1 = {
@@ -378,7 +378,7 @@
                         label: "{ico:play-arrow} " + (live ? "Watch live" : "Offline"),
                         enable: live,
                         action: "interaction:commit",
-                        data: { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login }
+                        data: { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login, title: live ? s.title : null }
                     },
                     {
                         type: "button",
@@ -734,11 +734,12 @@
         });
     }
 
-    function playLive(channel, cid, label) {
+    function playLive(channel, cid, label, title) {
         TVXInteractionPlugin.startLoading();
         Twitch.playbackToken(channel, null, function (err, token) {
             if (err) { playFailed(err); return; }
-            resolveQualityAndPlay(Twitch.liveUrl(channel, token), label + " — LIVE", { channel: channel, cid: cid });
+            var playerLabel = label + " — " + (title || "LIVE");
+            resolveQualityAndPlay(Twitch.liveUrl(channel, token), playerLabel, { channel: channel, cid: cid });
         });
     }
 
@@ -784,7 +785,7 @@
             var d = data && data.data;
             if (!d || !d.action) { return; }
             if (d.action === "play") {
-                playLive(d.channel, d.cid, d.label || d.channel);
+                playLive(d.channel, d.cid, d.label || d.channel, d.title);
             } else if (d.action === "playvod") {
                 playVod(d.vodId, d.label || "Video");
             } else if (d.action === "fav") {

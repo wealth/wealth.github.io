@@ -144,6 +144,14 @@ var Twitch = (function () {
         });
     }
 
+    /* Lightweight periodic stats for the player overlay (viewers + uptime) */
+    function streamStats(login, callback) {
+        query("query { user(login: " + lit(login) + ") { stream { viewersCount createdAt } } }", function (err, data) {
+            if (err) { callback(err, null); return; }
+            callback(null, data.user ? data.user.stream : null);
+        });
+    }
+
     function usersByLogins(logins, callback) {
         var list = [];
         for (var i = 0; i < logins.length; i++) { list.push(lit(logins[i])); }
@@ -273,6 +281,7 @@ var Twitch = (function () {
     return {
         topStreams: topStreams,
         topGames: topGames,
+        streamStats: streamStats,
         gameStreams: gameStreams,
         channel: channel,
         usersByLogins: usersByLogins,

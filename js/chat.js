@@ -26,6 +26,9 @@ var StvChat = (function () {
     var channel = null;
     var channelId = null;
     var container = null;
+    var headerEl = null;
+    var msgsEl = null;
+    var viewersCount = null;
     var ws = null;
     var disposed = false;
     var connected = false;
@@ -78,29 +81,54 @@ var StvChat = (function () {
             " " + getHeight() + " " + getWidth();
     }
 
+    function fmtCount(n) {
+        n = n || 0;
+        if (n >= 1000000) { return (n / 1000000).toFixed(1).replace(".0", "") + "M"; }
+        if (n >= 1000) { return (n / 1000).toFixed(1).replace(".0", "") + "K"; }
+        return String(n);
+    }
+
+    function renderHeader() {
+        if (headerEl == null) { return; }
+        if (viewersCount == null) {
+            headerEl.style.display = "none";
+        } else {
+            headerEl.style.display = "";
+            headerEl.innerHTML = "<span class=\"stv-head-pill\"><span class=\"stv-dot\"></span>" + fmtCount(viewersCount) + "</span>";
+        }
+    }
+
     function ensureContainer() {
         if (container == null) {
             container = document.createElement("div");
+            headerEl = document.createElement("div");
+            headerEl.className = "stv-head";
+            headerEl.style.display = "none";
+            msgsEl = document.createElement("div");
+            msgsEl.className = "stv-msgs";
+            container.appendChild(headerEl);
+            container.appendChild(msgsEl);
             document.body.appendChild(container);
+            renderHeader();
         }
         applyStyle();
     }
 
     function clearMessages() {
-        if (container != null) {
-            container.innerHTML = "";
+        if (msgsEl != null) {
+            msgsEl.innerHTML = "";
         }
         queue = [];
     }
 
     function appendMessage(html) {
-        if (container == null) { return; }
+        if (msgsEl == null) { return; }
         var node = document.createElement("div");
         node.className = "stv-msg";
         node.innerHTML = html;
-        container.appendChild(node);
-        while (container.childNodes.length > MAX_MESSAGES) {
-            container.removeChild(container.firstChild);
+        msgsEl.appendChild(node);
+        while (msgsEl.childNodes.length > MAX_MESSAGES) {
+            msgsEl.removeChild(msgsEl.firstChild);
         }
     }
 
@@ -404,6 +432,10 @@ var StvChat = (function () {
         },
         isAvailable: function () { return channel != null; },
         isEnabled: isEnabled,
+        setViewers: function (count) {
+            viewersCount = typeof count === "number" ? count : null;
+            renderHeader();
+        },
         toggle: function () {
             if (channel == null) { return; }
             if (isEnabled()) {
