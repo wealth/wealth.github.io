@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.3.0";
+    var VERSION = "1.4.0";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -170,6 +170,18 @@
         imageFiller: "cover"
     };
 
+    function channelOptions(login) {
+        return {
+            headline: "Channel",
+            template: { enumerate: false, type: "control", layout: "0,0,8,1" },
+            items: [{
+                icon: "video-library",
+                label: "Channel & videos",
+                action: creq("channel:" + login)
+            }]
+        };
+    }
+
     function streamCard(node) {
         var footer = "{ico:visibility} " + fmtNum(node.viewersCount);
         if (node.game && node.game.displayName) {
@@ -179,7 +191,15 @@
             image: bust(node.previewImageURL),
             title: node.broadcaster.displayName || node.broadcaster.login,
             titleFooter: footer,
-            action: creq("channel:" + node.broadcaster.login)
+            action: "interaction:commit",
+            data: {
+                action: "play",
+                channel: node.broadcaster.login,
+                cid: node.broadcaster.id,
+                label: node.broadcaster.displayName || node.broadcaster.login,
+                title: node.title
+            },
+            options: channelOptions(node.broadcaster.login)
         };
     }
 
@@ -202,7 +222,7 @@
             color: "msx-glass",
             imageFiller: "cover",
             title: user.displayName || user.login,
-            action: creq("channel:" + user.login)
+            options: channelOptions(user.login)
         };
         if (live) {
             var s = user.stream;
@@ -211,9 +231,18 @@
             card.tagColor = "msx-red";
             card.titleFooter = "{ico:visibility} " + fmtNum(s.viewersCount) +
                 (s.game && s.game.displayName ? "  " + s.game.displayName : "");
+            card.action = "interaction:commit";
+            card.data = {
+                action: "play",
+                channel: user.login,
+                cid: user.id,
+                label: user.displayName || user.login,
+                title: s.title
+            };
         } else {
             card.image = user.profileImageURL;
             card.titleFooter = "Offline";
+            card.action = creq("channel:" + user.login);
         }
         return card;
     }
@@ -703,10 +732,26 @@
         }
         var data = { playerLabel: label };
         if (ownPlayer) {
-            /* Repurpose the player OSD content button to open the chat options panel */
+            /* Repurpose player OSD buttons as chat controls with remote-key
+               shortcuts. Arrows are reserved by MSX for navigation, red for
+               player restart and blue for the menu, so:
+               green = chat on/off, yellow = position, channel up = height,
+               channel down = width, OK = player controls (default). */
             data.properties = {
                 "button:content:icon": "settings",
-                "button:content:action": "panel:request:player:options"
+                "button:content:action": "panel:request:player:options",
+                "button:prev:icon": "chat",
+                "button:prev:key": "green",
+                "button:prev:action": "player:commit:message:chatkey:toggle",
+                "button:next:icon": "swap-horiz",
+                "button:next:key": "yellow",
+                "button:next:action": "player:commit:message:chatkey:pos",
+                "button:speed:icon": "unfold-more",
+                "button:speed:key": "channel_up",
+                "button:speed:action": "player:commit:message:chatkey:height",
+                "button:rewind:icon": "settings-ethernet",
+                "button:rewind:key": "channel_down",
+                "button:rewind:action": "player:commit:message:chatkey:width"
             };
         }
         TVXInteractionPlugin.stopLoading();

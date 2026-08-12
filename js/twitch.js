@@ -83,7 +83,7 @@ var Twitch = (function () {
         return JSON.stringify(String(str));
     }
 
-    var STREAM_FIELDS = "id title viewersCount previewImageURL(width: 440, height: 248) game { name displayName } broadcaster { login displayName }";
+    var STREAM_FIELDS = "id title viewersCount previewImageURL(width: 440, height: 248) game { name displayName } broadcaster { id login displayName }";
 
     function mapStreamEdges(conn) {
         var out = { items: [], cursor: null, hasNext: false };
@@ -155,7 +155,7 @@ var Twitch = (function () {
     function usersByLogins(logins, callback) {
         var list = [];
         for (var i = 0; i < logins.length; i++) { list.push(lit(logins[i])); }
-        query("query { users(logins: [" + list.join(", ") + "]) { login displayName profileImageURL(width: 300) stream { title viewersCount previewImageURL(width: 440, height: 248) game { displayName } } } }", function (err, data) {
+        query("query { users(logins: [" + list.join(", ") + "]) { id login displayName profileImageURL(width: 300) stream { title viewersCount previewImageURL(width: 440, height: 248) game { displayName } } } }", function (err, data) {
             if (err) { callback(err, null); return; }
             callback(null, data.users || []);
         });
@@ -163,7 +163,7 @@ var Twitch = (function () {
 
     function search(text, callback) {
         var q = lit(text);
-        query("query { channels: searchFor(userQuery: " + q + ", platform: \"web\", target: {index: CHANNEL}) { channels { edges { item { ... on User { login displayName profileImageURL(width: 300) stream { viewersCount previewImageURL(width: 440, height: 248) game { displayName } } } } } } } games: searchFor(userQuery: " + q + ", platform: \"web\", target: {index: GAME}) { games { edges { item { ... on Game { id name displayName viewersCount boxArtURL(width: 285, height: 380) } } } } } }", function (err, data) {
+        query("query { channels: searchFor(userQuery: " + q + ", platform: \"web\", target: {index: CHANNEL}) { channels { edges { item { ... on User { id login displayName profileImageURL(width: 300) stream { title viewersCount previewImageURL(width: 440, height: 248) game { displayName } } } } } } } games: searchFor(userQuery: " + q + ", platform: \"web\", target: {index: GAME}) { games { edges { item { ... on Game { id name displayName viewersCount boxArtURL(width: 285, height: 380) } } } } } }", function (err, data) {
             if (err) { callback(err, null); return; }
             var out = { channels: [], games: [] };
             var edges, i;

@@ -134,6 +134,36 @@ function HlsPlayer() {
     }
 
     /* ------------------------------------------------------------------ */
+    /* Favorites (shared with the app via localStorage)                   */
+    /* ------------------------------------------------------------------ */
+
+    function getFavorites() {
+        try {
+            var list = JSON.parse(window.localStorage.getItem("stv:favorites") || "[]");
+            return Object.prototype.toString.call(list) === "[object Array]" ? list : [];
+        } catch (e) { return []; }
+    }
+
+    function isFavorite(login) {
+        var list = getFavorites();
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] === login) { return true; }
+        }
+        return false;
+    }
+
+    function toggleFavorite(login) {
+        var list = getFavorites();
+        var out = [];
+        var found = false;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] === login) { found = true; } else { out.push(list[i]); }
+        }
+        if (!found) { out.push(login); }
+        try { window.localStorage.setItem("stv:favorites", JSON.stringify(out)); } catch (e) { }
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Chat options panel (opened from the player OSD / options button)   */
     /* ------------------------------------------------------------------ */
 
@@ -152,6 +182,10 @@ function HlsPlayer() {
         var items = [];
         if (StvChat.isAvailable()) {
             var labels = StvChat.stateLabels();
+            if (statsChannel != null) {
+                var fav = isFavorite(statsChannel);
+                items.push(chatOptionItem(fav ? "star" : "star-border", fav ? "Remove favorite" : "Add favorite", "fav:toggle"));
+            }
             items.push(chatOptionItem("chat", "Chat: " + labels.enabled, "chat:toggle"));
             if (StvChat.isEnabled()) {
                 items.push(chatOptionItem("swap-horiz", "Position: " + labels.pos, "chat:pos"));
@@ -175,18 +209,34 @@ function HlsPlayer() {
         };
     }
 
+    function applyChatCommand(cmd) {
+        if (cmd === "toggle") {
+            StvChat.toggle();
+        } else if (cmd === "size") {
+            StvChat.cycleSize();
+        } else if (cmd === "pos") {
+            StvChat.cyclePos();
+        } else if (cmd === "height") {
+            StvChat.cycleHeight();
+        } else if (cmd === "width") {
+            StvChat.cycleWidth();
+        } else {
+            return false;
+        }
+        return true;
+    }
+
     function handleMessage(message) {
         if (!TVXTools.isFullStr(message)) { return; }
-        if (message === "chat:toggle") {
-            StvChat.toggle();
-        } else if (message === "chat:size") {
-            StvChat.cycleSize();
-        } else if (message === "chat:pos") {
-            StvChat.cyclePos();
-        } else if (message === "chat:height") {
-            StvChat.cycleHeight();
-        } else if (message === "chat:width") {
-            StvChat.cycleWidth();
+        if (message.indexOf("chatkey:") === 0) {
+            /* Direct remote-key shortcut: apply silently, no panel */
+            applyChatCommand(message.substring(8));
+            return;
+        }
+        if (message === "fav:toggle") {
+            if (statsChannel != null) { toggleFavorite(statsChannel); }
+        } else if (message.indexOf("chat:") === 0) {
+            if (!applyChatCommand(message.substring(5))) { return; }
         } else {
             return;
         }

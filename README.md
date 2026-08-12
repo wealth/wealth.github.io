@@ -61,22 +61,22 @@ Everything is static files — host them on any web server.
 
 ## Remote control quick reference
 
-- **OK** on a stream card → channel page; **OK** on the preview or "Watch live" → play
-- **Channel up/down** (or left/right at the edge) → flip between content pages (e.g. channel info → recent videos)
+- **OK** on a live stream card → plays immediately (no intermediate page)
+- **Options/menu key** on a card → "Channel & videos" (channel page with recent VODs); offline channels open it directly
 - **Back** → previous page / stop playback
-- **Add favorite** on a channel page → channel appears under Favorites
 
-### Chat controls during playback
+### During playback
 
-Bring up the player controls (OK / up) and select the **settings icon** (rightmost button) — it opens the chat options panel:
+- **OK** → player controls (with stream title and total stream time)
+- **Green** → chat on/off
+- **Yellow** → chat position left/right
+- **Channel up** → chat height (Full → 75% → 50% → 25%)
+- **Channel down** → chat width (30% → 25% → 20% → 15% → 10%)
+- **Settings icon** in the player controls → options panel: **add/remove favorite**, chat toggle, position, height, width, text size
 
-- **Chat: On/Off** — toggle the overlay
-- **Position** — Left ↔ Right
-- **Height** — cycles Full → 75% → 50% → 25% (measured from the bottom)
-- **Width** — cycles 30% → 25% → 20% → 15% → 10% of the screen
-- **Text size** — cycles Small → Medium → Large
+(Arrow keys are reserved by the Media Station X player for navigation and seeking, and red/blue for restart/menu — so chat shortcuts live on the green/yellow and channel keys.)
 
-Changes apply instantly and are remembered. The same options are available app-wide under **Settings** (chat defaults used for every stream).
+Changes apply instantly and are remembered. The same chat options are available app-wide under **Settings**.
 
 ## Settings notes
 
