@@ -6,13 +6,16 @@ Inspired by [SmartTwitchTV](https://github.com/fgl27/smarttwitchtv) for Android.
 
 ## Features
 
+- **Chat overlay on video** — live Twitch chat rendered over the stream, with **7TV and BetterTTV emotes** (global + per-channel) plus native Twitch emotes, colored usernames, and flood protection
+  - **Switchable size** (Small / Medium / Large) and **position** (any corner) — both in Settings and live during playback
+  - Anonymous IRC-over-WebSocket connection, no login needed
 - **Top streams** — browse the most-viewed live channels, with previews, viewer counts, and games
 - **Games** — top categories with box art; open a game to see its live streams
 - **Search** — on-screen keyboard (remote-friendly), finds channels and games as you type
 - **Channel pages** — live preview, stream title, game, uptime, follower count, watch button
 - **Recent videos (VODs)** — play past broadcasts of any channel
 - **Favorites** — your own followed-channels list, stored on the TV, live channels sorted first (no Twitch login needed)
-- **Settings** — preferred stream quality and player selection
+- **Settings** — chat overlay, preferred stream quality, and player selection
 - Uses Twitch's public GQL API anonymously — no login, no API key, no backend server. All requests go directly from the TV to Twitch.
 
 ## Repository layout
@@ -22,8 +25,9 @@ msx/start.json   MSX start parameter file (entry point)
 main.html        Interaction plugin (the app shell MSX loads)
 js/twitch.js     Twitch API layer (GQL queries, playback tokens, HLS URL handling)
 js/app.js        UI: menu, pages, cards, search, favorites, settings, playback
-player.html      Optional fallback video player (hls.js based)
-js/player.js     Fallback player logic
+player.html      Video player page with the chat overlay (native HLS + hls.js fallback)
+js/player.js     Player logic (video + chat options panel)
+js/chat.js       Chat overlay: Twitch IRC over WebSocket, 7TV/BTTV/Twitch emotes
 ```
 
 Everything is static files — host them on any web server.
@@ -58,10 +62,21 @@ Everything is static files — host them on any web server.
 - **Back** → previous page / stop playback
 - **Add favorite** on a channel page → channel appears under Favorites
 
+### Chat controls during playback
+
+Bring up the player controls (OK / up) and select the **settings icon** (rightmost button) — it opens the chat options panel:
+
+- **Chat: On/Off** — toggle the overlay
+- **Chat size** — cycles Small → Medium → Large
+- **Chat position** — cycles Bottom left → Bottom right → Top left → Top right
+
+Changes apply instantly and are remembered. The same options are available app-wide under **Settings** (chat defaults used for every stream).
+
 ## Settings notes
 
+- **Chat overlay** — when On, live streams play through the bundled player page so chat can be drawn over the video (native HLS first, hls.js as automatic fallback). When Off, playback uses the player selected below.
 - **Stream quality** — `Auto` hands Twitch's adaptive master playlist to the player (recommended on TVs). Fixed qualities (Source/720p/…) require reading the playlist from the TV browser; on platforms where Twitch's CDN blocks that (CORS), playback silently falls back to Auto.
-- **Player** — `TV player` uses the TV's native HLS support via MSX (recommended on webOS). `HLS.js player` is a bundled fallback ([player.html](player.html)) for platforms without native HLS. Note: desktop browsers can't fetch Twitch streams at all due to Twitch CDN CORS policy — that's a Twitch restriction, not a bug; on TVs the native player is unaffected.
+- **Player (chatless playback)** — `TV player` uses the TV's native HLS support via MSX (recommended on webOS). `App player` is the bundled [player.html](player.html) without chat. Note: desktop browsers can't fetch Twitch streams at all due to Twitch CDN CORS policy — that's a Twitch restriction, not a bug; on TVs native playback is unaffected (chat still works everywhere).
 
 ## Testing in a desktop browser
 

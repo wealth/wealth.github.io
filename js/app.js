@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.0.0";
+    var VERSION = "1.1.0";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -359,7 +359,7 @@
             };
             if (live) {
                 preview.action = "interaction:commit";
-                preview.data = { action: "play", channel: user.login, label: user.displayName || user.login };
+                preview.data = { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login };
             }
 
             var page1 = {
@@ -378,7 +378,7 @@
                         label: "{ico:play-arrow} " + (live ? "Watch live" : "Offline"),
                         enable: live,
                         action: "interaction:commit",
-                        data: { action: "play", channel: user.login, label: user.displayName || user.login }
+                        data: { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login }
                     },
                     {
                         type: "button",
@@ -583,7 +583,25 @@
 
     var PLAYER_OPTIONS = [
         { value: "default", label: "TV player (recommended)" },
-        { value: "html5x", label: "HLS.js player (fallback)" }
+        { value: "html5x", label: "App player (hls.js)" }
+    ];
+
+    var CHAT_OPTIONS = [
+        { value: "on", label: "On (over video)" },
+        { value: "off", label: "Off" }
+    ];
+
+    var CHAT_SIZE_OPTIONS = [
+        { value: "s", label: "Small" },
+        { value: "m", label: "Medium" },
+        { value: "l", label: "Large" }
+    ];
+
+    var CHAT_POS_OPTIONS = [
+        { value: "bl", label: "Bottom left" },
+        { value: "br", label: "Bottom right" },
+        { value: "tl", label: "Top left" },
+        { value: "tr", label: "Top right" }
     ];
 
     function radioItems(options, storeKey, current) {
@@ -607,8 +625,11 @@
             cache: false,
             refocus: true,
             pages: [
+                { headline: "Chat overlay (also switchable during playback via player options)", items: radioItems(CHAT_OPTIONS, "chat", store.get("chat", "on")) },
+                { headline: "Chat size", items: radioItems(CHAT_SIZE_OPTIONS, "chatsize", store.get("chatsize", "m")) },
+                { headline: "Chat position", items: radioItems(CHAT_POS_OPTIONS, "chatpos", store.get("chatpos", "bl")) },
                 { headline: "Stream quality", items: radioItems(QUALITY_OPTIONS, "quality", store.get("quality", "auto")) },
-                { headline: "Player (switch if playback fails)", items: radioItems(PLAYER_OPTIONS, "player", store.get("player", "default")) }
+                { headline: "Player for chatless playback (switch if playback fails)", items: radioItems(PLAYER_OPTIONS, "player", store.get("player", "default")) }
             ]
         };
     }
@@ -642,15 +663,32 @@
     /* Playback                                                           */
     /* ------------------------------------------------------------------ */
 
-    function launchVideo(url, label) {
+    function launchVideo(url, label, extra) {
         var action;
-        if (store.get("player", "default") === "html5x") {
+        var ownPlayer = false;
+        var chatOn = extra != null && extra.channel != null && store.get("chat", "on") === "on";
+        if (chatOn) {
+            /* Chat overlay requires our own player page */
+            action = "video:plugin:" + PLAYER_URL + "?url=" + encodeURIComponent(url) +
+                "&channel=" + encodeURIComponent(extra.channel) +
+                (extra.cid ? "&cid=" + encodeURIComponent(extra.cid) : "");
+            ownPlayer = true;
+        } else if (store.get("player", "default") === "html5x") {
             action = "video:plugin:" + PLAYER_URL + "?url=" + encodeURIComponent(url);
+            ownPlayer = true;
         } else {
             action = "video:" + url;
         }
+        var data = { playerLabel: label };
+        if (ownPlayer) {
+            /* Repurpose the player OSD content button to open the chat options panel */
+            data.properties = {
+                "button:content:icon": "settings",
+                "button:content:action": "panel:request:player:options"
+            };
+        }
         TVXInteractionPlugin.stopLoading();
-        TVXInteractionPlugin.executeAction(action, { playerLabel: label });
+        TVXInteractionPlugin.executeAction(action, data);
     }
 
     function playFailed(err) {
@@ -658,27 +696,27 @@
         TVXInteractionPlugin.executeAction("error:" + err);
     }
 
-    function resolveQualityAndPlay(masterUrl, label) {
+    function resolveQualityAndPlay(masterUrl, label, extra) {
         var quality = store.get("quality", "auto");
         if (quality === "auto") {
-            launchVideo(masterUrl, label);
+            launchVideo(masterUrl, label, extra);
             return;
         }
         Twitch.fetchText(masterUrl, function (err, text) {
             if (err || !text) {
-                launchVideo(masterUrl, label);
+                launchVideo(masterUrl, label, extra);
                 return;
             }
             var url = Twitch.pickVariant(Twitch.parseMaster(text), quality);
-            launchVideo(url || masterUrl, label);
+            launchVideo(url || masterUrl, label, extra);
         });
     }
 
-    function playLive(channel, label) {
+    function playLive(channel, cid, label) {
         TVXInteractionPlugin.startLoading();
         Twitch.playbackToken(channel, null, function (err, token) {
             if (err) { playFailed(err); return; }
-            resolveQualityAndPlay(Twitch.liveUrl(channel, token), label + " — LIVE");
+            resolveQualityAndPlay(Twitch.liveUrl(channel, token), label + " — LIVE", { channel: channel, cid: cid });
         });
     }
 
@@ -724,7 +762,7 @@
             var d = data && data.data;
             if (!d || !d.action) { return; }
             if (d.action === "play") {
-                playLive(d.channel, d.label || d.channel);
+                playLive(d.channel, d.cid, d.label || d.channel);
             } else if (d.action === "playvod") {
                 playVod(d.vodId, d.label || "Video");
             } else if (d.action === "fav") {

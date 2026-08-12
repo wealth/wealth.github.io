@@ -1,7 +1,8 @@
 /*
- * HLS video plugin for Smart Twitch TV (MSX).
- * Plays the "url" parameter: natively where HLS is supported (webOS, Safari),
- * otherwise via hls.js (desktop browsers, Android, some Tizen models).
+ * HLS video plugin for Smart Twitch TV (MSX) with chat overlay.
+ * Playback: native <video> first (webOS/Safari play HLS without CORS),
+ * automatic hls.js fallback where native HLS is unavailable (desktop, Android).
+ * Chat: see js/chat.js; controlled via the player options panel.
  * ES5 only.
  */
 function HlsPlayer() {
@@ -12,6 +13,21 @@ function HlsPlayer() {
     var ready = false;
     var ended = false;
     var livePosition = 0;
+    var videoUrl = null;
+    var nativeTried = false;
+    var hlsTried = false;
+
+    function canUseHlsJs() {
+        return typeof Hls !== "undefined" && Hls.isSupported();
+    }
+
+    function canPlayHlsNatively() {
+        try {
+            var video = document.createElement("video");
+            return video.canPlayType("application/vnd.apple.mpegurl") !== "" ||
+                video.canPlayType("application/x-mpegURL") !== "";
+        } catch (e) { return false; }
+    }
 
     function onWaiting() { TVXVideoPlugin.startLoading(); }
     function onPlaying() {
@@ -32,10 +48,14 @@ function HlsPlayer() {
         }
     }
     function onError() {
-        if (player != null && player.error != null) {
-            TVXVideoPlugin.error("Video error " + player.error.code + (player.error.message ? ": " + player.error.message : ""));
-            TVXVideoPlugin.stopLoading();
+        if (player == null || player.error == null) { return; }
+        /* Native attempt failed (e.g. desktop browser): retry once with hls.js */
+        if (nativeTried && !hlsTried && canUseHlsJs()) {
+            setupHlsJs();
+            return;
         }
+        TVXVideoPlugin.error("Video error " + player.error.code + (player.error.message ? ": " + player.error.message : ""));
+        TVXVideoPlugin.stopLoading();
     }
     function onEnded() {
         if (!ended) {
@@ -44,43 +64,102 @@ function HlsPlayer() {
         }
     }
 
-    function canPlayHlsNatively() {
-        try {
-            var video = document.createElement("video");
-            return video.canPlayType("application/vnd.apple.mpegurl") !== "" ||
-                video.canPlayType("application/x-mpegURL") !== "";
-        } catch (e) { return false; }
+    function setupHlsJs() {
+        hlsTried = true;
+        try { player.removeAttribute("src"); } catch (e) { }
+        hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true
+        });
+        hls.on(Hls.Events.ERROR, function (event, data) {
+            if (data && data.fatal) {
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.details !== Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
+                    hls.startLoad();
+                } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    hls.recoverMediaError();
+                } else {
+                    TVXVideoPlugin.error("HLS error: " + (data.details || data.type));
+                    TVXVideoPlugin.stopLoading();
+                }
+            }
+        });
+        hls.loadSource(videoUrl);
+        hls.attachMedia(player);
     }
 
     function setupVideo(url) {
-        /* Prefer hls.js: some browsers (e.g. Chrome) report "maybe" for native
-           HLS support but cannot actually play it. Native is used only where
-           MSE/hls.js is unavailable (Safari/iOS, old TV browsers). */
-        if (typeof Hls !== "undefined" && Hls.isSupported()) {
-            hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true
-            });
-            hls.on(Hls.Events.ERROR, function (event, data) {
-                if (data && data.fatal) {
-                    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                        hls.startLoad();
-                    } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                        hls.recoverMediaError();
-                    } else {
-                        TVXVideoPlugin.error("HLS error: " + (data.details || data.type));
-                        TVXVideoPlugin.stopLoading();
-                    }
-                }
-            });
-            hls.loadSource(url);
-            hls.attachMedia(player);
-        } else {
-            /* Native HLS (Safari/iOS, webOS) or last resort */
+        videoUrl = url;
+        if (canPlayHlsNatively() || !canUseHlsJs()) {
+            /* Native first: on TVs this avoids CORS entirely (media resource load).
+               If it errors and hls.js is available, onError() falls back once. */
+            nativeTried = true;
             player.src = url;
             player.load();
+        } else {
+            setupHlsJs();
         }
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Chat options panel (opened from the player OSD / options button)   */
+    /* ------------------------------------------------------------------ */
+
+    var lastOptionMessage = null;
+
+    function chatOptionItem(icon, label, message) {
+        return {
+            focus: lastOptionMessage === message,
+            icon: icon,
+            label: label,
+            action: "player:commit:message:" + message
+        };
+    }
+
+    function createOptionsPanel() {
+        var items = [];
+        if (StvChat.isAvailable()) {
+            var labels = StvChat.stateLabels();
+            items.push(chatOptionItem("chat", "Chat: " + labels.enabled, "chat:toggle"));
+            if (StvChat.isEnabled()) {
+                items.push(chatOptionItem("format-size", "Chat size: " + labels.size, "chat:size"));
+                items.push(chatOptionItem("picture-in-picture-alt", "Chat position: " + labels.pos, "chat:pos"));
+            }
+        } else {
+            items.push({ enable: false, label: "No options available" });
+        }
+        return {
+            cache: false,
+            reuse: false,
+            headline: "Options",
+            template: {
+                enumerate: false,
+                type: "control",
+                layout: "0,0,8,1"
+            },
+            items: items
+        };
+    }
+
+    function handleMessage(message) {
+        if (!TVXTools.isFullStr(message)) { return; }
+        if (message === "chat:toggle") {
+            StvChat.toggle();
+        } else if (message === "chat:size") {
+            StvChat.cycleSize();
+        } else if (message === "chat:pos") {
+            StvChat.cyclePos();
+        } else {
+            return;
+        }
+        lastOptionMessage = message;
+        /* Reopen the panel so it reflects the new state */
+        TVXVideoPlugin.executeAction("cleanup");
+        TVXVideoPlugin.executeAction("panel:request:player:options");
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Player interface                                                   */
+    /* ------------------------------------------------------------------ */
 
     this.init = function () {
         player = document.getElementById("player");
@@ -101,8 +180,13 @@ function HlsPlayer() {
         }
         TVXVideoPlugin.startLoading();
         var url = TVXServices.urlParams.get("url");
+        var channel = TVXServices.urlParams.get("channel");
+        var cid = TVXServices.urlParams.get("cid");
         if (TVXTools.isFullStr(url)) {
             setupVideo(url);
+            if (TVXTools.isFullStr(channel)) {
+                StvChat.init(channel, cid);
+            }
         } else {
             TVXVideoPlugin.warn("Video URL is missing");
             TVXVideoPlugin.stopLoading();
@@ -110,6 +194,7 @@ function HlsPlayer() {
     };
 
     this.dispose = function () {
+        StvChat.dispose();
         if (hls != null) {
             try { hls.destroy(); } catch (e) { }
             hls = null;
@@ -145,6 +230,16 @@ function HlsPlayer() {
             duration: this.getDuration(),
             speed: this.getSpeed()
         };
+    };
+    this.handleData = function (data) {
+        handleMessage(data != null ? data.message : null);
+    };
+    this.handleRequest = function (dataId, data, callback) {
+        if (dataId === "options") {
+            callback(createOptionsPanel());
+        } else {
+            callback(null);
+        }
     };
 }
 

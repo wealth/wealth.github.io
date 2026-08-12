@@ -7,9 +7,45 @@
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
         video { width: 100%; height: 100%; background: #000; }
+
+        .stv-chat {
+            position: absolute;
+            z-index: 10;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            overflow: hidden;
+            pointer-events: none;
+            max-height: 72vh;
+        }
+        .stv-chat.pos-bl { left: 1.5vw; bottom: 2vh; -webkit-justify-content: flex-end; justify-content: flex-end; }
+        .stv-chat.pos-br { right: 1.5vw; bottom: 2vh; -webkit-justify-content: flex-end; justify-content: flex-end; }
+        .stv-chat.pos-tl { left: 1.5vw; top: 2vh; -webkit-justify-content: flex-start; justify-content: flex-start; }
+        .stv-chat.pos-tr { right: 1.5vw; top: 2vh; -webkit-justify-content: flex-start; justify-content: flex-start; }
+        .stv-chat.size-s { width: 24vw; font-size: 2.1vh; }
+        .stv-chat.size-m { width: 30vw; font-size: 2.7vh; }
+        .stv-chat.size-l { width: 38vw; font-size: 3.4vh; }
+
+        .stv-msg {
+            -webkit-flex-shrink: 0;
+            flex-shrink: 0;
+            margin-top: 0.35vh;
+            padding: 0.2em 0.45em;
+            border-radius: 0.35em;
+            background: rgba(0, 0, 0, 0.55);
+            color: #ffffff;
+            font-family: "Roboto", "LG Display", "SamsungOne", sans-serif;
+            line-height: 1.35;
+            word-wrap: break-word;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+        }
+        .stv-nick { font-weight: bold; }
+        .stv-emote { height: 1.35em; vertical-align: middle; margin: -0.15em 0; }
     </style>
     <script src="//msx.benzac.de/js/tvx-plugin.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+    <script src="js/chat.js"></script>
     <script src="js/player.js"></script>
 </head>
 
