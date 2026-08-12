@@ -68,8 +68,8 @@ Everything is static files — host them on any web server.
 Open **Connect account** in the menu. The TV shows a code; go to [twitch.tv/activate](https://www.twitch.tv/activate) on any device, sign in to Twitch, and enter the code. The TV picks it up automatically and adds **Following** and **Recommended** to the menu. Your session is remembered; **Log out** is under the account menu item.
 
 Notes:
-- Uses the same anonymous public Twitch client the web player uses, so no app registration is needed. Login is standard OAuth; the app only requests permission to read who you follow.
-- **Following** shows channels you follow that are **live right now**. **Recommended** = top live streams across the game categories you follow (falls back to global top streams if you follow no categories).
+- Login uses a **registered Twitch application** client-ID (device flow, read-only). This is required: Twitch gates its *first-party* web client behind an anti-bot integrity check on personalized data, so followed/recommended lists come back empty for it. The bundled client-ID is reused from the open-source SmartTwitchTV app (published as reusable); to use your own, create one at [dev.twitch.tv/console](https://dev.twitch.tv/console) and set `CLIENT_ID` in [js/auth.js](js/auth.js). Anonymous browsing/search/playback still use Twitch's public web client — no login needed.
+- **Following** shows channels you follow that are **live right now**. **Recommended** = top live streams across the game categories you follow (falling back to the categories your live follows are playing, then global top streams).
 - If your session can't be refreshed (Twitch expires it), the app quietly signs you out — just connect again.
 
 ## Remote control quick reference

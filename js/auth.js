@@ -7,8 +7,16 @@
 var TwitchAuth = (function () {
     "use strict";
 
-    /* Same public web Client-ID used for GQL; it has device flow enabled. */
-    var CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+    /*
+     * A *registered* third-party Twitch application client-ID (device-flow
+     * enabled). This is required for personalized data: Twitch gates the
+     * first-party web client (kimne...) behind an anti-bot integrity check on
+     * followed/recommended GQL fields, so those silently return empty for it.
+     * A registered app's OAuth token is not subject to that gate.
+     * Reused (published as reusable) from the open-source SmartTwitchTV app;
+     * swap in your own from dev.twitch.tv/console if you prefer.
+     */
+    var CLIENT_ID = "ue6666qo983tsx6so1t0vnawi233wa";
     var SCOPES = "user:read:follows";
     var DEVICE_URL = "https://id.twitch.tv/oauth2/device";
     var TOKEN_URL = "https://id.twitch.tv/oauth2/token";
@@ -25,6 +33,15 @@ var TwitchAuth = (function () {
             var raw = window.localStorage.getItem(STORE_KEY);
             auth = raw ? JSON.parse(raw) : null;
         } catch (e) { auth = null; }
+        /*
+         * A token is only valid for the client-ID it was issued for. If the app
+         * client-ID changed (e.g. upgrading from the old first-party client),
+         * discard the stored token so the user re-logs in cleanly.
+         */
+        if (auth && auth.client_id !== CLIENT_ID) {
+            auth = null;
+            saveAuth();
+        }
     }
 
     function saveAuth() {
@@ -84,6 +101,7 @@ var TwitchAuth = (function () {
                 return;
             }
             auth = {
+                client_id: CLIENT_ID,
                 access_token: token.access_token,
                 refresh_token: token.refresh_token || null,
                 expires_at: token.expires_in ? (new Date().getTime() + token.expires_in * 1000) : 0,

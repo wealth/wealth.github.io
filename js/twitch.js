@@ -84,25 +84,34 @@ var Twitch = (function () {
     /* Helix which rejects this first-party client token.                   */
     /* ------------------------------------------------------------------ */
 
-    /* Live streams from channels the logged-in user follows */
+    /*
+     * Live streams from channels the logged-in user follows.
+     * Uses the exact operation the Twitch web client uses (FollowingLive_CurrentUser)
+     * — proven to work with a registered third-party OAuth token (see the
+     * reference SmartTwitchTV app). Ad-hoc personalized queries via the
+     * first-party web client are silently gated by Twitch's integrity check.
+     */
     function followedStreams(cursor, callback) {
-        gqlAuth("query { currentUser { followedLiveUsers(first: 40) { edges { node { id login displayName stream { id title viewersCount previewImageURL(width: 440, height: 248) game { name displayName } } } } } } }", function (err, data) {
+        var after = cursor ? ", after: " + lit(cursor) : "";
+        var q = "query FollowingLive_CurrentUser { currentUser { followedLiveUsers(first: 100" + after + ") { pageInfo { hasNextPage } edges { cursor node { stream { id type title viewersCount createdAt previewImageURL(width: 440, height: 248) game { id displayName } broadcaster { id login displayName } } } } } } }";
+        gqlAuth(q, function (err, data) {
             if (err) { callback(err, null); return; }
             if (!data || !data.currentUser) { callback("Please sign in again", null); return; }
-            var out = { items: [], cursor: null, hasNext: false };
             var conn = data.currentUser.followedLiveUsers;
             var edges = conn && conn.edges ? conn.edges : [];
+            var out = { items: [], cursor: null, hasNext: conn && conn.pageInfo ? !!conn.pageInfo.hasNextPage : false };
             for (var i = 0; i < edges.length; i++) {
-                var n = edges[i].node;
-                if (n && n.stream) {
+                var s = edges[i].node && edges[i].node.stream;
+                if (s && s.broadcaster) {
                     out.items.push({
-                        id: n.stream.id,
-                        title: n.stream.title,
-                        viewersCount: n.stream.viewersCount,
-                        previewImageURL: n.stream.previewImageURL,
-                        game: n.stream.game || { name: "", displayName: "" },
-                        broadcaster: { id: n.id, login: n.login, displayName: n.displayName }
+                        id: s.id,
+                        title: s.title,
+                        viewersCount: s.viewersCount,
+                        previewImageURL: s.previewImageURL,
+                        game: s.game ? { name: s.game.displayName, displayName: s.game.displayName } : { name: "", displayName: "" },
+                        broadcaster: { id: s.broadcaster.id, login: s.broadcaster.login, displayName: s.broadcaster.displayName }
                     });
+                    out.cursor = edges[i].cursor || out.cursor;
                 }
             }
             out.items.sort(function (a, b) { return b.viewersCount - a.viewersCount; });
@@ -116,23 +125,35 @@ var Twitch = (function () {
      * playing). Falls back to global top streams only as a last resort.
      */
     function recommendedStreams(callback) {
-        gqlAuth("query { currentUser { followedGames(first: 8, type: ALL) { nodes { name } } followedLiveUsers(first: 40) { edges { node { stream { game { name } } } } } } }", function (err, data) {
-            var cu = data ? data.currentUser : null;
+        var uid = (typeof TwitchAuth !== "undefined") ? TwitchAuth.userId() : null;
+        /*
+         * followedGames must be read via user(id: <own id>) with the user's token
+         * (as the reference app does); currentUser.followedLiveUsers gives us the
+         * categories the live follows are playing as a fallback seed. Games are
+         * collected by id so we can look up top streams with game(id:) (reliable).
+         */
+        var gq = "query { " +
+            (uid ? "user(id: " + lit(uid) + ") { followedGames(first: 100, type: LIVE) { nodes { id displayName } } } " : "") +
+            "currentUser { followedLiveUsers(first: 100) { edges { node { stream { game { id displayName } } } } } } }";
+        gqlAuth(gq, function (err, data) {
             var games = [];
             var seenGame = {};
-            function addGame(name) {
-                if (name && !seenGame[name] && games.length < 6) { seenGame[name] = true; games.push(name); }
+            function addGame(id, name) {
+                if (id && !seenGame[id] && games.length < 6) { seenGame[id] = true; games.push({ id: id, name: name }); }
             }
-            if (cu && cu.followedGames && cu.followedGames.nodes) {
-                for (var i = 0; i < cu.followedGames.nodes.length; i++) {
-                    addGame(cu.followedGames.nodes[i] ? cu.followedGames.nodes[i].name : null);
+            var u = data ? data.user : null;
+            if (u && u.followedGames && u.followedGames.nodes) {
+                for (var i = 0; i < u.followedGames.nodes.length; i++) {
+                    var fg = u.followedGames.nodes[i];
+                    if (fg) { addGame(fg.id, fg.displayName); }
                 }
             }
+            var cu = data ? data.currentUser : null;
             if (games.length === 0 && cu && cu.followedLiveUsers && cu.followedLiveUsers.edges) {
                 var edges = cu.followedLiveUsers.edges;
                 for (var j = 0; j < edges.length; j++) {
                     var s = edges[j].node && edges[j].node.stream;
-                    if (s && s.game) { addGame(s.game.name); }
+                    if (s && s.game) { addGame(s.game.id, s.game.displayName); }
                 }
             }
             if (games.length === 0) {
@@ -141,7 +162,7 @@ var Twitch = (function () {
             }
             var aliases = [];
             for (var g = 0; g < games.length; g++) {
-                aliases.push("g" + g + ": game(name: " + lit(games[g]) + ") { streams(first: 6) { edges { node { " + STREAM_FIELDS + " } } } }");
+                aliases.push("g" + g + ": game(id: " + lit(games[g].id) + ") { streams(first: 8) { edges { node { " + STREAM_FIELDS + " } } } }");
             }
             gqlAuth("query { " + aliases.join(" ") + " }", function (err2, data2) {
                 if (err2 || !data2) { topStreams(null, callback); return; }
