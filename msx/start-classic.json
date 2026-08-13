@@ -1,0 +1,10 @@
+{
+    "name": "Smart Twitch TV (Classic)",
+    "version": "1.6.1",
+    "parameter": "menu:request:interaction:init@https://wealth.github.io/main.html",
+    "welcome": "none",
+    "launcher": {
+        "icon": "live-tv",
+        "color": "msx-black-soft"
+    }
+}

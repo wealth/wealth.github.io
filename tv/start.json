@@ -1,6 +1,6 @@
 {
     "name": "Smart Twitch TV",
     "version": "1.7.0",
-    "parameter": "content:https://wealth.github.io/msx/start.json",
+    "parameter": "content:https://wealth.github.io/tv/start.json",
     "action": "link:https://wealth.github.io/tv/"
 }

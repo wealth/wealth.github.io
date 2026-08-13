@@ -413,6 +413,9 @@ var StvChat = (function () {
     return {
         init: function (channelLogin, cid) {
             if (!channelLogin) { return; }
+            /* Reusable across streams (the self-rendered app keeps one instance) */
+            disposed = false;
+            emoteMap = {};
             channel = String(channelLogin).toLowerCase();
             channelId = cid || null;
             if (isEnabled()) {
@@ -426,6 +429,12 @@ var StvChat = (function () {
                 clearInterval(flushTimer);
                 flushTimer = null;
             }
+            /* Remove the overlay from the DOM so it doesn't linger over the app */
+            if (container != null && container.parentNode) { container.parentNode.removeChild(container); }
+            container = null;
+            headerEl = null;
+            msgsEl = null;
+            viewersCount = null;
         },
         isAvailable: function () { return channel != null; },
         isEnabled: isEnabled,
