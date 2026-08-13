@@ -7,7 +7,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.7.4";
+    var VERSION = "1.7.5";
 
     /* Toggle a class on <html> — ES5-safe (no classList assumptions). */
     function setRootPlaying(on) {
@@ -269,6 +269,13 @@
             if (osdOpen) { hideOsd(); } else { stop(); }
         }
 
+        /* Pointer (air-mouse) click while the player is open: an OSD button runs
+           its action; clicking the video toggles the controls. */
+        function click(el) {
+            if (el && el._action) { el._action(); return; }
+            if (osdOpen) { hideOsd(); } else { showOsd(); }
+        }
+
         function onKey(k) {
             if (osdOpen) {
                 switch (k) {
@@ -304,7 +311,7 @@
         return {
             init: init, start: start, stop: stop,
             isOpen: function () { return open; },
-            onKey: onKey, back: back
+            onKey: onKey, back: back, click: click
         };
     })();
 
@@ -637,6 +644,28 @@
             try { if (fromPopstate) { history.back(); } else { history.go(-2); } } catch (e) { }
         }
 
+        /* ---- Pointer / air-mouse support (LG Magic Remote) ---- */
+        function closestFocusable(el) {
+            while (el && el !== document) {
+                if (el.className && (" " + el.className + " ").indexOf(" focusable ") >= 0) { return el; }
+                el = el.parentNode;
+            }
+            return null;
+        }
+        function onPointerOver(e) {
+            var el = closestFocusable(e.target);
+            if (el && el !== Nav.current()) { Nav.setFocus(el); }
+        }
+        function onPointerClick(e) {
+            var el = closestFocusable(e.target);
+            if (Player.isOpen()) {
+                if (el) { Nav.setFocus(el); }
+                Player.click(el);
+                return;
+            }
+            if (el) { Nav.setFocus(el); activate(el); }
+        }
+
         function onKeyGlobal(e) {
             var k = e.keyCode || e.which;
             if (k === 8 || k === 27 || k === 461 || k === 10009) { e.preventDefault(); handleBack(false); return; }
@@ -677,6 +706,9 @@
             armTrap();
             window.addEventListener("popstate", function () { handleBack(true); });
             document.addEventListener("keydown", onKeyGlobal);
+            /* Air-mouse: hover moves focus, click activates. */
+            document.addEventListener("mouseover", onPointerOver);
+            document.addEventListener("click", onPointerClick);
             /* Land on the first available section (Following when signed in). */
             var items = menuItems();
             selectSection(items.length ? items[0].key : "top");
