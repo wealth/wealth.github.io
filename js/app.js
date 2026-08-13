@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.5.4";
+    var VERSION = "1.5.5";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -641,11 +641,14 @@
         { value: "html5x", label: "App player (hls.js)" }
     ];
 
-    /* Ad-block: route live playback through a token-passing proxy (see twitch.js) */
+    /* Ad-block: route live playback through a playlist proxy (see twitch.js).
+       Different regions get different ad campaigns, so offer a few — try each. */
     var ADBLOCK_OPTIONS = [
         { value: "off", label: "Off" },
-        { value: "ontdb", label: "On — proxy 1 (ontdb)" },
-        { value: "kwabang", label: "On — proxy 2 (kwabang)" }
+        { value: "eu", label: "On — Europe proxy" },
+        { value: "eu2", label: "On — Europe proxy 2" },
+        { value: "na", label: "On — North America proxy" },
+        { value: "as", label: "On — Asia proxy" }
     ];
 
     var CHAT_OPTIONS = [
@@ -833,7 +836,7 @@
             var primaryUrl = directUrl;
             if (adblock !== "off") {
                 /* Ad-free proxy first; fall back to direct (ad-supported) on failure */
-                primaryUrl = Twitch.liveUrlProxy(channel, token, adblock);
+                primaryUrl = Twitch.liveUrlProxy(channel, adblock);
                 extra.fallback = directUrl;
             }
             resolveQualityAndPlay(primaryUrl, playerLabel, extra);

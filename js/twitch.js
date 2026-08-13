@@ -365,21 +365,29 @@ var Twitch = (function () {
     }
 
     /*
-     * Ad-block: fetch the HLS playlist through a token-passing proxy instead of
-     * usher directly. The proxy requests the stream in a way Twitch doesn't
-     * serve mid-roll ads to, so the "commercial break" placeholder is avoided.
-     * Same URL shape as usher (channel + token + sig), just a different host.
-     * Public proxies rotate/go down — always keep the direct liveUrl() as a
-     * fallback (the player retries with it on error).
+     * Ad-block: fetch the HLS playlist through a "playlist proxy" instead of
+     * usher directly. The proxy fetches its OWN anonymous token and requests
+     * the stream from an ad-free region, so Twitch doesn't stitch the mid-roll
+     * "commercial break" ads in. We never pass the user's token to it.
+     *
+     * These are the maintained TTV-LOL-PRO v1 endpoints (cdn-perfprod / luminous),
+     * which — unlike the old ttv.lol / ontdb / kwabang proxies — need no custom
+     * request header, so a TV's native <video> element can load them directly.
+     * URL format (from streamlink-ttvlol): {host}/playlist/{channel}.m3u8 with
+     * the query string percent-encoded into the path. Public proxies rotate/go
+     * down and are region-dependent — always keep direct liveUrl() as a fallback.
      */
     var AD_PROXIES = {
-        ontdb: "https://api1080.ontdb.com/",
-        kwabang: "https://api.twitch.hkg.kwabang.net/hls-raw/"
+        eu: "https://lb-eu.cdn-perfprod.com",
+        eu2: "https://eu.luminous.dev",
+        na: "https://lb-na.cdn-perfprod.com",
+        as: "https://lb-as.cdn-perfprod.com"
     };
 
-    function liveUrlProxy(login, token, which) {
-        var base = AD_PROXIES[which] || AD_PROXIES.ontdb;
-        return base + encodeURIComponent(login.toLowerCase()) + ".m3u8" + usherParams(token);
+    function liveUrlProxy(login, which) {
+        var base = AD_PROXIES[which] || AD_PROXIES.eu;
+        var params = "?platform=web&allow_source=true&allow_audio_only=true&fast_bread=true&p=" + Math.floor(Math.random() * 9999999);
+        return base + "/playlist/" + login.toLowerCase() + ".m3u8" + encodeURIComponent(params);
     }
 
     function vodUrl(vodId, token) {
