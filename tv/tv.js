@@ -7,7 +7,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.7.2";
+    var VERSION = "1.7.3";
 
     /* Toggle a class on <html> — ES5-safe (no classList assumptions). */
     function setRootPlaying(on) {
@@ -263,6 +263,12 @@
             Nav.setScope(document);
         }
 
+        /* Back while the player is open: close the OSD first, else stop the stream.
+           (Back keys are routed here from App via handleBack — not via onKey.) */
+        function back() {
+            if (osdOpen) { hideOsd(); } else { stop(); }
+        }
+
         function onKey(k) {
             if (osdOpen) {
                 switch (k) {
@@ -271,7 +277,6 @@
                     case 38: Nav.move("up"); return;
                     case 40: Nav.move("down"); return;
                     case 13: var c = Nav.current(); if (c && c._action) { c._action(); } return;
-                    case 8: case 27: case 461: case 10009: hideOsd(); return;
                     default: return;
                 }
             }
@@ -282,7 +287,6 @@
                 case 37: if (typeof StvChat !== "undefined") { StvChat.cyclePos(); } return; /* left: position */
                 case 39: if (typeof StvChat !== "undefined") { StvChat.cycleWidth(); } return; /* right: width */
                 case 38: if (typeof StvChat !== "undefined") { StvChat.cycleHeight(); } return; /* up: height */
-                case 8: case 27: case 461: case 10009: stop(); return;         /* BACK -> close stream */
                 default: return;
             }
         }
@@ -300,7 +304,7 @@
         return {
             init: init, start: start, stop: stop,
             isOpen: function () { return open; },
-            onKey: onKey
+            onKey: onKey, back: back
         };
     })();
 
@@ -592,13 +596,16 @@
             if (el._action) { el._action(); return; }
         }
 
-        function goBack() {
+        /* One step "back" inside the app. Returns true if it was handled
+           (stay in the app), false only at the very top (menu) -> exit to MSX. */
+        function appBack() {
+            if (Player.isOpen()) { Player.back(); return true; }
             if (viewStack.length > 0) {
                 viewStack.pop();
                 if (viewStack.length > 0 && viewStack[viewStack.length - 1].type === "game") {
                     var g = viewStack[viewStack.length - 1].game; viewStack.pop(); openGame(g);
                 } else { selectSection(currentKey); }
-                return;
+                return true;
             }
             /* If focus is in the content area, move it back to the menu first. */
             var cur = Nav.current();
@@ -606,14 +613,33 @@
             if (!inMenu) {
                 var mi = $("menu").querySelector(".menu-item.focused") || $("menu").querySelector(".menu-item");
                 if (mi) { Nav.setFocus(mi); }
-                return;
+                return true;
             }
-            /* Already at the top (menu): leave the app -> back to MSX (which launched us) */
-            try { history.back(); } catch (e) { }
+            return false;   /* at the top menu */
+        }
+
+        /* Back handling that survives webOS/MSX: the platform Back does a real
+           browser history navigation, so we keep a pushed "trap" state and
+           absorb the resulting popstate (re-arming it) instead of letting the
+           window navigate back to the MSX launcher (which looked like a restart).
+           The keydown path is kept too; a short debounce stops a single Back
+           press being handled twice when BOTH fire. */
+        var backLock = 0;
+        function nowMs() { return (new Date()).getTime(); }
+        function armTrap() { try { history.pushState({ stv: 1 }, ""); } catch (e) { } }
+
+        function handleBack(fromPopstate) {
+            var t = nowMs();
+            if (t - backLock < 300) { if (fromPopstate) { armTrap(); } return; }
+            backLock = t;
+            if (appBack()) { if (fromPopstate) { armTrap(); } return; }
+            /* Top level: leave the app -> back to MSX (which launched us). */
+            try { if (fromPopstate) { history.back(); } else { history.go(-2); } } catch (e) { }
         }
 
         function onKeyGlobal(e) {
             var k = e.keyCode || e.which;
+            if (k === 8 || k === 27 || k === 461 || k === 10009) { e.preventDefault(); handleBack(false); return; }
             if (Player.isOpen()) { Player.onKey(k); e.preventDefault(); return; }
             switch (k) {
                 case 37: Nav.move("left"); break;
@@ -621,7 +647,6 @@
                 case 39: Nav.move("right"); break;
                 case 40: Nav.move("down"); break;
                 case 13: activate(Nav.current()); break;
-                case 8: case 27: case 461: case 10009: goBack(); break;
                 default: return;
             }
             e.preventDefault();
@@ -646,6 +671,11 @@
             Player.init();
             renderMenu();
             Nav.onChange(updateChrome);
+            /* Arm the history trap so the platform Back fires popstate that we
+               absorb (see handleBack) instead of navigating out of the app. */
+            try { history.replaceState({ stv: "root" }, ""); } catch (e) { }
+            armTrap();
+            window.addEventListener("popstate", function () { handleBack(true); });
             document.addEventListener("keydown", onKeyGlobal);
             selectSection("top");
             /* focus the Top streams menu item initially */
