@@ -267,6 +267,15 @@ function HlsPlayer() {
     /* ------------------------------------------------------------------ */
 
     this.init = function () {
+        /* MSX tears the video plugin down on Back by removing/hiding this frame
+           WITHOUT calling dispose() — on some platforms (webOS) it keeps the
+           frame alive in the background, so the stream would keep playing.
+           Fully stop when the frame is hidden or unloaded. (Verified this does
+           NOT fire when the OSD or options panel opens over the video.) */
+        try {
+            document.addEventListener("visibilitychange", function () { if (document.hidden) { teardown(); } });
+            window.addEventListener("pagehide", teardown);
+        } catch (e) { }
         player = document.getElementById("player");
         player.addEventListener("canplay", onReady);
         player.addEventListener("error", onError);
@@ -316,8 +325,12 @@ function HlsPlayer() {
         }
     }
 
-    this.dispose = function () {
-        StvChat.dispose();
+    var torndown = false;
+    /* Stop everything: video, chat and stats polling. Idempotent. */
+    function teardown() {
+        if (torndown) { return; }
+        torndown = true;
+        try { StvChat.dispose(); } catch (e) { }
         if (statsTimer != null) {
             clearInterval(statsTimer);
             statsTimer = null;
@@ -327,6 +340,10 @@ function HlsPlayer() {
             hls = null;
         }
         haltMedia();
+    }
+
+    this.dispose = function () {
+        teardown();
         player = null;
     };
 

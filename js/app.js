@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.5.7";
+    var VERSION = "1.5.8";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -756,13 +756,16 @@
     function launchVideo(url, label, extra) {
         var action;
         var ownPlayer = false;
-        var chatOn = extra != null && extra.channel != null && store.get("chat", "on") === "on";
+        var hasChannel = extra != null && extra.channel != null;
+        var chatOn = hasChannel && store.get("chat", "on") === "on";
         var hasFallback = extra != null && extra.fallback != null;
         /* Our own player page is required for the chat overlay AND for ad-block
            (it retries with the direct URL if the proxy playlist fails). */
         if (chatOn || hasFallback || store.get("player", "default") === "html5x") {
             action = "video:plugin:" + PLAYER_URL + "?url=" + encodeURIComponent(url);
-            if (chatOn) {
+            if (hasChannel) {
+                /* Always pass the channel (even when chat starts off) so the
+                   chat overlay can be toggled on during playback. */
                 action += "&channel=" + encodeURIComponent(extra.channel) +
                     (extra.cid ? "&cid=" + encodeURIComponent(extra.cid) : "");
             }
@@ -781,12 +784,13 @@
                 "button:content:icon": "settings",
                 "button:content:action": "panel:request:player:options"
             };
-            if (chatOn) {
+            if (hasChannel) {
                 /* Repurpose player OSD buttons as chat controls with remote-key
-                   shortcuts. Arrows are reserved by MSX for navigation, red for
-                   player restart and blue for the menu, so:
-                   green = chat on/off, yellow = position, channel up = height,
-                   channel down = width. */
+                   shortcuts (bound whenever a channel is present, so chat can be
+                   turned on/off even if it started off). Arrows are reserved by
+                   MSX for navigation, red for player restart and blue for the
+                   menu, so: green = chat on/off, yellow = position,
+                   channel up = height, channel down = width. */
                 data.properties["button:prev:icon"] = "chat";
                 data.properties["button:prev:key"] = "green";
                 data.properties["button:prev:action"] = "player:commit:message:chatkey:toggle";
