@@ -7,7 +7,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.7.1";
+    var VERSION = "1.7.2";
 
     /* Toggle a class on <html> — ES5-safe (no classList assumptions). */
     function setRootPlaying(on) {
@@ -68,6 +68,7 @@
         width: "M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z",
         text: "M9 4v3h5v12h3V7h5V4H9zm-6 8h3v7h3v-7h3V9H3v3z",
         play: "M8 5v14l11-7z",
+        pause: "M6 19h4V5H6v14zm8-14v14h4V5h-4z",
         back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
     };
     function icon(name, cls) {
@@ -108,7 +109,7 @@
         var video = null, layer = null, osd = null;
         var open = false, osdOpen = false;
         var hls = null, urls = [], urlIndex = 0, nativeTried = false, hlsTried = false;
-        var stream = null, statsTimer = null;
+        var stream = null, statsTimer = null, curStats = null;
         var osdFocusables = [];
 
         function canNative() {
@@ -155,6 +156,7 @@
                 Twitch.streamStats(login, function (err, s) {
                     if (err || !s) { return; }
                     if (typeof StvChat !== "undefined") { StvChat.setViewers(s.viewersCount); }
+                    curStats = s;
                     if (osdOpen) { renderOsd(s); }
                 });
             }
@@ -166,6 +168,7 @@
             stream = s;
             urls = [url].concat(fallbacks || []);
             urlIndex = 0; nativeTried = false; hlsTried = false;
+            curStats = null;
             open = true; osdOpen = false;
             setRootPlaying(true);   /* reveal the TV's hardware video plane */
             layer.style.display = "block";
@@ -194,7 +197,14 @@
             App.onPlayerClosed();
         }
 
+        function togglePlay() {
+            if (!video) { return; }
+            try { if (video.paused) { video.play(); } else { video.pause(); } } catch (e) { }
+            if (osdOpen) { renderOsd(curStats); }
+        }
+
         function renderOsd(stats) {
+            curStats = stats;
             var prevIdx = -1;
             if (osdFocusables.length) {
                 var cf = Nav.current();
@@ -205,20 +215,21 @@
             var title = stream.title || "";
             var game = (stream.game && stream.game.displayName) ? stream.game.displayName : "";
             var name = b.displayName || b.login;
-            var parts = [];
-            if (game) { parts.push(esc(game)); }
-            parts.push(esc(name));
-            if (stats && stats.createdAt) { parts.push("{ico} " + uptime(stats.createdAt)); }
-            var vc = stats ? stats.viewersCount : stream.viewersCount;
-            if (vc != null) { parts.push(icon("eye", "ob-ico") + " " + fmtNum(vc)); }
 
+            /* Title block: stream title, then game, then streamer (+ uptime/viewers) */
             osd.appendChild(elem("div", "osd-title", esc(title) || "LIVE"));
-            var sub = elem("div", "osd-sub");
-            sub.innerHTML = parts.join("  &middot;  ").replace("{ico}", icon("info", "ob-ico"));
-            osd.appendChild(sub);
+            if (game) { osd.appendChild(elem("div", "osd-sub", esc(game))); }
+            var meta = [esc(name)];
+            var vc = stats ? stats.viewersCount : stream.viewersCount;
+            if (vc != null) { meta.push(icon("eye", "ob-ico") + " " + fmtNum(vc)); }
+            if (stats && stats.createdAt) { meta.push(uptime(stats.createdAt)); }
+            var streamerEl = elem("div", "osd-streamer");
+            streamerEl.innerHTML = meta.join("  &middot;  ");
+            osd.appendChild(streamerEl);
 
+            /* Player controls (play/pause + favorite). No chat toggles here —
+               chat is controlled with the arrow keys while watching. */
             var actions = elem("div", "osd-actions");
-            var fav = isFavorite(b.login);
             osdFocusables = [];
             function addBtn(ic, label, fn) {
                 var btn = elem("div", "osd-btn focusable", icon(ic, "ob-ico") + "<span>" + esc(label) + "</span>");
@@ -226,19 +237,12 @@
                 actions.appendChild(btn);
                 osdFocusables.push(btn);
             }
+            var paused = !!(video && video.paused);
+            addBtn(paused ? "play" : "pause", paused ? "Play" : "Pause", togglePlay);
+            var fav = isFavorite(b.login);
             addBtn(fav ? "star" : "starO", fav ? "Remove favorite" : "Add favorite", function () {
-                var added = toggleFavorite(b.login); toast(added ? "Added to favorites" : "Removed from favorites"); renderOsd(stats);
+                var added = toggleFavorite(b.login); toast(added ? "Added to favorites" : "Removed from favorites"); renderOsd(curStats);
             });
-            if (typeof StvChat !== "undefined") {
-                var labels = StvChat.stateLabels();
-                addBtn("chat", "Chat: " + labels.enabled, function () { StvChat.toggle(); renderOsd(stats); });
-                if (StvChat.isEnabled()) {
-                    addBtn("swap", "Position: " + labels.pos, function () { StvChat.cyclePos(); renderOsd(stats); });
-                    addBtn("height", "Height: " + labels.height, function () { StvChat.cycleHeight(); renderOsd(stats); });
-                    addBtn("width", "Width: " + labels.width, function () { StvChat.cycleWidth(); renderOsd(stats); });
-                    addBtn("text", "Text: " + labels.size, function () { StvChat.cycleSize(); renderOsd(stats); });
-                }
-            }
             osd.appendChild(actions);
             if (osdOpen && osdFocusables.length) {
                 var idx = prevIdx >= 0 ? Math.min(prevIdx, osdFocusables.length - 1) : 0;
@@ -249,7 +253,7 @@
         function showOsd() {
             osdOpen = true;
             osd.style.display = "block";
-            renderOsd(null);
+            renderOsd(curStats);
             Nav.setScope(osd);
             if (osdFocusables.length) { Nav.setFocus(osdFocusables[0]); }
         }
@@ -629,9 +633,19 @@
             else { Nav.refocus(); }
         }
 
+        /* Collapse the sidebar to icons whenever focus is in the content area,
+           expand it when focus returns to the menu. */
+        function isMenuEl(el) { return !!(el && (" " + (el.className || "") + " ").indexOf(" menu-item ") >= 0); }
+        function updateChrome(el) {
+            var menu = $("menu");
+            var cls = menu.className.replace(/\bcollapsed\b/g, "").replace(/\s+$/, "");
+            menu.className = isMenuEl(el) ? cls : (cls + " collapsed");
+        }
+
         function start() {
             Player.init();
             renderMenu();
+            Nav.onChange(updateChrome);
             document.addEventListener("keydown", onKeyGlobal);
             selectSection("top");
             /* focus the Top streams menu item initially */

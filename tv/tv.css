@@ -23,16 +23,24 @@ html.playing #app { display: none; }
     width: 22vw; min-width: 22vw; height: 100%;
     background: #18181b; border-right: 1px solid #2a2a2e;
     padding: 3vh 0; overflow: hidden; flex-shrink: 0;
+    transition: width 0.12s ease, min-width 0.12s ease;
 }
-.menu-title { font-size: 3.2vh; font-weight: bold; padding: 0 2vw 2.5vh; color: #fff; }
+.menu-title { font-size: 3.2vh; font-weight: bold; padding: 0 2vw 2.5vh; color: #fff; white-space: nowrap; overflow: hidden; }
 .menu-item {
     display: flex; align-items: center; gap: 1vw;
     padding: 1.5vh 2vw; font-size: 2.6vh; color: #d0d0d3;
-    border-left: 0.4vw solid transparent; white-space: nowrap;
+    border-left: 0.4vw solid transparent; white-space: nowrap; overflow: hidden;
 }
 .menu-item .mi-ico { width: 3vh; height: 3vh; fill: currentColor; flex-shrink: 0; opacity: 0.9; }
 .menu-item.focused { background: #2a2a30; color: #fff; border-left-color: #9147ff; }
 .menu-sep { height: 1px; background: #2a2a2e; margin: 1.5vh 2vw; }
+
+/* Collapsed (icons only) — used while focus is in the content area */
+.menu.collapsed { width: 6.5vw; min-width: 6.5vw; }
+.menu.collapsed .menu-title { display: none; }
+.menu.collapsed .menu-item { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; }
+.menu.collapsed .menu-item span { display: none; }
+.menu.collapsed .menu-sep { margin: 1.5vh 1.5vw; }
 
 /* ---------------- Content area ---------------- */
 .content { flex: 1; height: 100%; overflow-y: auto; overflow-x: hidden; padding: 3vh 2.5vw; }
@@ -40,16 +48,18 @@ html.playing #app { display: none; }
 .section-title { font-size: 3vh; font-weight: bold; margin: 0 0 2.5vh; color: #fff; }
 .section-title .st-sub { color: #adadb8; font-weight: normal; font-size: 2.2vh; }
 
-/* Grid */
-.grid { display: flex; flex-wrap: wrap; gap: 1.6vw 1.6vw; }
+/* Grid — cards grow to fill the full content width (no blank strip on the right) */
+.grid { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 1.6vw 1.6vw; }
 .card {
-    width: 21vw; background: #1f1f23; border-radius: 0.8vh; overflow: hidden;
+    flex: 1 1 20vw; max-width: 25vw;
+    background: #1f1f23; border-radius: 0.8vh; overflow: hidden;
     border: 0.3vw solid transparent; transition: transform 0.08s ease;
 }
-.card.game-card { width: 13vw; }
+.card.game-card { flex: 1 1 12vw; max-width: 15vw; }
 .card.focused { border-color: #9147ff; transform: scale(1.04); }
-.card-thumb { width: 100%; height: 11.8vw; background: #000 center/cover no-repeat; position: relative; }
-.card.game-card .card-thumb { height: 17vw; }
+/* aspect-ratio via padding trick (works on old TV browsers): 16:9 thumbs */
+.card-thumb { width: 100%; height: 0; padding-bottom: 56.25%; background: #000 center/cover no-repeat; position: relative; }
+.card.game-card .card-thumb { padding-bottom: 133%; }
 .card-badge {
     position: absolute; left: 0.5vw; bottom: 0.5vw;
     background: rgba(0,0,0,0.75); color: #fff; font-size: 1.9vh;
@@ -89,8 +99,10 @@ html.playing #app { display: none; }
     padding: 3vh 3vw 3vh; z-index: 110;
     background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0));
 }
-.osd-title { font-size: 3vh; font-weight: bold; color: #fff; margin-bottom: 0.6vh; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
-.osd-sub { font-size: 2.4vh; color: #d0d0d3; margin-bottom: 2vh; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+.osd-title { font-size: 3.4vh; font-weight: bold; color: #fff; margin-bottom: 0.4vh; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+.osd-sub { font-size: 2.5vh; color: #bbbbc2; margin-bottom: 0.2vh; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+.osd-streamer { font-size: 2.5vh; color: #d0d0d3; margin-bottom: 1.8vh; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+.osd-streamer .ob-ico { width: 2.4vh; height: 2.4vh; fill: currentColor; vertical-align: -0.35vh; opacity: 0.9; }
 .osd-actions { display: flex; gap: 1vw; flex-wrap: wrap; }
 .osd-btn {
     display: flex; align-items: center; gap: 0.6vw;

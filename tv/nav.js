@@ -8,6 +8,7 @@ var Nav = (function () {
 
     var current = null;
     var scope = document;   /* limit focusables to this element (e.g. a dialog) */
+    var changeCb = null;    /* fired whenever focus actually moves to a new element */
 
     function isVisible(el) {
         if (!el) { return false; }
@@ -51,6 +52,7 @@ var Nav = (function () {
         current = el;
         if (current.className.indexOf("focused") < 0) { current.className += " focused"; }
         scrollIntoView(current);
+        if (changeCb) { try { changeCb(current); } catch (e) { } }
     }
 
     function focusFirst() {
@@ -108,6 +110,7 @@ var Nav = (function () {
         refocus: refocus,
         setScope: setScope,
         focusables: focusables,
+        onChange: function (fn) { changeCb = fn; },
         current: function () { return current; }
     };
 })();
