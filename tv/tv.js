@@ -7,7 +7,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.7.3";
+    var VERSION = "1.7.4";
 
     /* Toggle a class on <html> — ES5-safe (no classList assumptions). */
     function setRootPlaying(on) {
@@ -347,11 +347,11 @@
         var lastPlayEl = null; /* card we launched a stream from (restore focus on close) */
 
         var SECTIONS = [
+            { key: "following", label: "Following", icon: "heart", auth: true },
+            { key: "recommended", label: "Recommended", icon: "thumb", auth: true },
             { key: "top", label: "Top streams", icon: "tv" },
             { key: "games", label: "Games", icon: "games" },
             { key: "favorites", label: "Favorites", icon: "star" },
-            { key: "following", label: "Following", icon: "heart", auth: true },
-            { key: "recommended", label: "Recommended", icon: "thumb", auth: true },
             { key: "account", label: "", icon: "account" },   /* label computed */
             { key: "settings", label: "Settings", icon: "settings" },
             { key: "about", label: "About", icon: "info" }
@@ -677,8 +677,9 @@
             armTrap();
             window.addEventListener("popstate", function () { handleBack(true); });
             document.addEventListener("keydown", onKeyGlobal);
-            selectSection("top");
-            /* focus the Top streams menu item initially */
+            /* Land on the first available section (Following when signed in). */
+            var items = menuItems();
+            selectSection(items.length ? items[0].key : "top");
             var first = $("menu").querySelector(".menu-item");
             if (first) { Nav.setFocus(first); }
         }

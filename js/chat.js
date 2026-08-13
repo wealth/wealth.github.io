@@ -445,14 +445,14 @@ var StvChat = (function () {
         toggle: function () {
             if (channel == null) { return; }
             if (isEnabled()) {
+                /* Just hide it. Keep the IRC connection + messages so turning
+                   it back on doesn't clear the chat (visibility toggle). */
                 setStore("chat", "off");
-                disconnect();
-                clearMessages();
                 if (container != null) { container.style.display = "none"; }
             } else {
                 setStore("chat", "on");
+                start();   /* idempotent: reuses the live connection if any */
                 if (container != null) { container.style.display = ""; }
-                start();
             }
         },
         cycleSize: function () {
