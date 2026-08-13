@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.6.0";
+    var VERSION = "1.6.1";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -1040,7 +1040,14 @@
     var handler = {
         init: function () { },
         ready: function () { },
-        handleEvent: function (data) { },
+        handleEvent: function (data) {
+            /* MSX fires video:stop when the user backs out of the player. On some
+               platforms (webOS) MSX leaves the player frame running in the
+               background instead of disposing it, so force it fully closed. */
+            if (data && (data.event === "video:stop" || data.event === "video:ended")) {
+                try { TVXInteractionPlugin.executeAction("player:eject"); } catch (e) { }
+            }
+        },
         handleData: function (data) {
             var d = data && data.data;
             if (!d || !d.action) { return; }

@@ -275,6 +275,17 @@ function HlsPlayer() {
         try {
             document.addEventListener("visibilitychange", function () { if (document.hidden) { teardown(); } });
             window.addEventListener("pagehide", teardown);
+            /* Back key: catch it in the player itself (like Lampa does) so the
+               stream is stopped and we return to the menu — webOS = 461,
+               Tizen = 10009, plus Backspace(8)/Escape(27). MSX doesn't reliably
+               dispose the plugin on Back on webOS, so handle it here. */
+            document.addEventListener("keydown", function (e) {
+                var k = e.keyCode || e.which;
+                if (k === 461 || k === 10009 || k === 8 || k === 27) {
+                    teardown();
+                    try { TVXVideoPlugin.stopPlayback(); } catch (ex) { }
+                }
+            });
         } catch (e) { }
         player = document.getElementById("player");
         player.addEventListener("canplay", onReady);
