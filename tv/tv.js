@@ -7,7 +7,14 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.7.0";
+    var VERSION = "1.7.1";
+
+    /* Toggle a class on <html> — ES5-safe (no classList assumptions). */
+    function setRootPlaying(on) {
+        var el = document.documentElement;
+        var cls = (" " + (el.className || "") + " ").replace(" playing ", " ").replace(/^\s+|\s+$/g, "");
+        el.className = on ? (cls ? cls + " playing" : "playing") : cls;
+    }
 
     /* ------------------------------------------------------------------ */
     /* Small helpers                                                      */
@@ -160,6 +167,7 @@
             urls = [url].concat(fallbacks || []);
             urlIndex = 0; nativeTried = false; hlsTried = false;
             open = true; osdOpen = false;
+            setRootPlaying(true);   /* reveal the TV's hardware video plane */
             layer.style.display = "block";
             hideLoading();
             showLoading();
@@ -181,6 +189,7 @@
             if (video) { try { video.pause(); video.removeAttribute("src"); video.load(); } catch (e) { } }
             osd.style.display = "none"; empty(osd);
             layer.style.display = "none";
+            setRootPlaying(false);  /* restore the browse UI (un-hide #app) */
             hideLoading();
             App.onPlayerClosed();
         }
