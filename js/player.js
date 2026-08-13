@@ -304,6 +304,18 @@ function HlsPlayer() {
         }
     };
 
+    /* Fully stop the <video> element. Nulling the JS reference is not enough:
+       the DOM element keeps playing (audio) in the background otherwise. */
+    function haltMedia() {
+        if (player != null) {
+            try {
+                player.pause();
+                player.removeAttribute("src");
+                player.load();
+            } catch (e) { }
+        }
+    }
+
     this.dispose = function () {
         StvChat.dispose();
         if (statsTimer != null) {
@@ -314,6 +326,7 @@ function HlsPlayer() {
             try { hls.destroy(); } catch (e) { }
             hls = null;
         }
+        haltMedia();
         player = null;
     };
 

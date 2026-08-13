@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.5.6";
+    var VERSION = "1.5.7";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -197,7 +197,8 @@
                 channel: node.broadcaster.login,
                 cid: node.broadcaster.id,
                 label: node.broadcaster.displayName || node.broadcaster.login,
-                title: node.title
+                title: node.title,
+                game: node.game && node.game.displayName ? node.game.displayName : null
             },
             options: channelOptions(node.broadcaster.login)
         };
@@ -414,7 +415,7 @@
             };
             if (live) {
                 preview.action = "interaction:commit";
-                preview.data = { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login, title: s.title };
+                preview.data = { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login, title: s.title, game: s.game && s.game.displayName ? s.game.displayName : null };
             }
 
             var page1 = {
@@ -433,7 +434,7 @@
                         label: "{ico:play-arrow} " + (live ? "Watch live" : "Offline"),
                         enable: live,
                         action: "interaction:commit",
-                        data: { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login, title: live ? s.title : null }
+                        data: { action: "play", channel: user.login, cid: user.id, label: user.displayName || user.login, title: live ? s.title : null, game: live && s.game && s.game.displayName ? s.game.displayName : null }
                     },
                     {
                         type: "button",
@@ -827,11 +828,16 @@
         });
     }
 
-    function playLive(channel, cid, label, title) {
+    function playLive(channel, cid, label, title, game) {
         TVXInteractionPlugin.startLoading();
         Twitch.playbackToken(channel, null, function (err, token) {
             if (err) { playFailed(err); return; }
-            var playerLabel = label + " — " + (title || "LIVE");
+            /* Player controls label: stream title, then game, then streamer */
+            var parts = [];
+            if (title) { parts.push(title); }
+            if (game) { parts.push(game); }
+            if (label) { parts.push(label); }
+            var playerLabel = parts.length ? parts.join("  —  ") : "LIVE";
             var directUrl = Twitch.liveUrl(channel, token);
             var extra = { channel: channel, cid: cid };
             var adblock = store.get("adblock", "off");
@@ -1035,7 +1041,7 @@
             var d = data && data.data;
             if (!d || !d.action) { return; }
             if (d.action === "play") {
-                playLive(d.channel, d.cid, d.label || d.channel, d.title);
+                playLive(d.channel, d.cid, d.label || d.channel, d.title, d.game);
             } else if (d.action === "playvod") {
                 playVod(d.vodId, d.label || "Video");
             } else if (d.action === "fav") {
