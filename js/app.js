@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.5.5";
+    var VERSION = "1.5.6";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -809,14 +809,16 @@
         TVXInteractionPlugin.executeAction("error:" + err);
     }
 
-    function resolveQualityAndPlay(masterUrl, label, extra) {
-        var quality = store.get("quality", "auto");
+    function resolveQualityAndPlay(masterUrl, label, extra, forcedQuality) {
+        var quality = forcedQuality || store.get("quality", "auto");
         if (quality === "auto") {
             launchVideo(masterUrl, label, extra);
             return;
         }
         Twitch.fetchText(masterUrl, function (err, text) {
             if (err || !text) {
+                /* Can't read the master (e.g. proxy without CORS): let the
+                   player pick adaptively from the master instead. */
                 launchVideo(masterUrl, label, extra);
                 return;
             }
@@ -834,12 +836,18 @@
             var extra = { channel: channel, cid: cid };
             var adblock = store.get("adblock", "off");
             var primaryUrl = directUrl;
+            var forcedQuality = null;
             if (adblock !== "off") {
                 /* Ad-free proxy first; fall back to direct (ad-supported) on failure */
                 primaryUrl = Twitch.liveUrlProxy(channel, adblock);
                 extra.fallback = directUrl;
+                /* Adaptive bitrate tends to stick on the lowest rendition through
+                   the proxy, so force best quality unless the user picked a fixed
+                   one. (Needs the proxy to allow cross-origin reads; falls back to
+                   adaptive if not.) */
+                if (store.get("quality", "auto") === "auto") { forcedQuality = "source"; }
             }
-            resolveQualityAndPlay(primaryUrl, playerLabel, extra);
+            resolveQualityAndPlay(primaryUrl, playerLabel, extra, forcedQuality);
         });
     }
 
