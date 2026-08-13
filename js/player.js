@@ -16,6 +16,8 @@ function HlsPlayer() {
     var videoUrl = null;
     var nativeTried = false;
     var hlsTried = false;
+    var urls = [];         /* candidate URLs, tried in order (e.g. ad-block proxy, then direct) */
+    var urlIndex = 0;
     var statsChannel = null;
     var statsTimer = null;
 
@@ -80,6 +82,18 @@ function HlsPlayer() {
             TVXVideoPlugin.startPlayback(true);
         }
     }
+    /* Move on to the next candidate URL (e.g. ad-block proxy failed → direct). */
+    function advanceUrl() {
+        if (urlIndex >= urls.length - 1) { return false; }
+        urlIndex++;
+        nativeTried = false;
+        hlsTried = false;
+        if (hls != null) { try { hls.destroy(); } catch (e) { } hls = null; }
+        TVXVideoPlugin.startLoading();
+        setupVideo(urls[urlIndex]);
+        return true;
+    }
+
     function onError() {
         if (player == null || player.error == null) { return; }
         /* Native attempt failed (e.g. desktop browser): retry once with hls.js */
@@ -87,6 +101,8 @@ function HlsPlayer() {
             setupHlsJs();
             return;
         }
+        /* This URL is exhausted: try the next candidate before giving up */
+        if (advanceUrl()) { return; }
         TVXVideoPlugin.error("Video error " + player.error.code + (player.error.message ? ": " + player.error.message : ""));
         TVXVideoPlugin.stopLoading();
     }
@@ -110,7 +126,7 @@ function HlsPlayer() {
                     hls.startLoad();
                 } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
                     hls.recoverMediaError();
-                } else {
+                } else if (!advanceUrl()) {
                     TVXVideoPlugin.error("HLS error: " + (data.details || data.type));
                     TVXVideoPlugin.stopLoading();
                 }
@@ -269,10 +285,15 @@ function HlsPlayer() {
         }
         TVXVideoPlugin.startLoading();
         var url = TVXServices.urlParams.get("url");
+        var fallback = TVXServices.urlParams.get("fallback");
         var channel = TVXServices.urlParams.get("channel");
         var cid = TVXServices.urlParams.get("cid");
         if (TVXTools.isFullStr(url)) {
-            setupVideo(url);
+            urls = [url];
+            /* Ad-block proxy passes the direct URL as a fallback (retried on error) */
+            if (TVXTools.isFullStr(fallback)) { urls.push(fallback); }
+            urlIndex = 0;
+            setupVideo(urls[0]);
             if (TVXTools.isFullStr(channel)) {
                 StvChat.init(channel, cid);
                 startStats(channel);

@@ -1,6 +1,6 @@
 {
     "name": "Smart Twitch TV",
-    "version": "1.5.3",
+    "version": "1.5.4",
     "parameter": "menu:request:interaction:init@https://wealth.github.io/main.html",
     "welcome": "none",
     "launcher": {

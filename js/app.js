@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.5.3";
+    var VERSION = "1.5.4";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
@@ -641,6 +641,13 @@
         { value: "html5x", label: "App player (hls.js)" }
     ];
 
+    /* Ad-block: route live playback through a token-passing proxy (see twitch.js) */
+    var ADBLOCK_OPTIONS = [
+        { value: "off", label: "Off" },
+        { value: "ontdb", label: "On — proxy 1 (ontdb)" },
+        { value: "kwabang", label: "On — proxy 2 (kwabang)" }
+    ];
+
     var CHAT_OPTIONS = [
         { value: "on", label: "On (over video)" },
         { value: "off", label: "Off" }
@@ -706,6 +713,7 @@
                 { headline: "Chat width", items: radioItems(CHAT_WIDTH_OPTIONS, "chatwidth", store.get("chatwidth", "w30")) },
                 { headline: "Chat text size", items: radioItems(CHAT_SIZE_OPTIONS, "chatsize", store.get("chatsize", "m")) },
                 { headline: "Stream quality", items: radioItems(QUALITY_OPTIONS, "quality", store.get("quality", "auto")) },
+                { headline: "Block ads (routes live streams through a proxy; falls back to normal playback if it fails — try either proxy)", items: radioItems(ADBLOCK_OPTIONS, "adblock", store.get("adblock", "off")) },
                 { headline: "Player for chatless playback (switch if playback fails)", items: radioItems(PLAYER_OPTIONS, "player", store.get("player", "default")) }
             ]
         };
@@ -745,41 +753,49 @@
         var action;
         var ownPlayer = false;
         var chatOn = extra != null && extra.channel != null && store.get("chat", "on") === "on";
-        if (chatOn) {
-            /* Chat overlay requires our own player page */
-            action = "video:plugin:" + PLAYER_URL + "?url=" + encodeURIComponent(url) +
-                "&channel=" + encodeURIComponent(extra.channel) +
-                (extra.cid ? "&cid=" + encodeURIComponent(extra.cid) : "");
-            ownPlayer = true;
-        } else if (store.get("player", "default") === "html5x") {
+        var hasFallback = extra != null && extra.fallback != null;
+        /* Our own player page is required for the chat overlay AND for ad-block
+           (it retries with the direct URL if the proxy playlist fails). */
+        if (chatOn || hasFallback || store.get("player", "default") === "html5x") {
             action = "video:plugin:" + PLAYER_URL + "?url=" + encodeURIComponent(url);
+            if (chatOn) {
+                action += "&channel=" + encodeURIComponent(extra.channel) +
+                    (extra.cid ? "&cid=" + encodeURIComponent(extra.cid) : "");
+            }
+            if (hasFallback) {
+                action += "&fallback=" + encodeURIComponent(extra.fallback);
+            }
             ownPlayer = true;
         } else {
             action = "video:" + url;
         }
         var data = { playerLabel: label };
         if (ownPlayer) {
-            /* Repurpose player OSD buttons as chat controls with remote-key
-               shortcuts. Arrows are reserved by MSX for navigation, red for
-               player restart and blue for the menu, so:
-               green = chat on/off, yellow = position, channel up = height,
-               channel down = width, OK = player controls (default). */
+            /* OK = player controls (default); content button opens the options
+               panel (favorite + chat controls). */
             data.properties = {
                 "button:content:icon": "settings",
-                "button:content:action": "panel:request:player:options",
-                "button:prev:icon": "chat",
-                "button:prev:key": "green",
-                "button:prev:action": "player:commit:message:chatkey:toggle",
-                "button:next:icon": "swap-horiz",
-                "button:next:key": "yellow",
-                "button:next:action": "player:commit:message:chatkey:pos",
-                "button:speed:icon": "unfold-more",
-                "button:speed:key": "channel_up",
-                "button:speed:action": "player:commit:message:chatkey:height",
-                "button:rewind:icon": "settings-ethernet",
-                "button:rewind:key": "channel_down",
-                "button:rewind:action": "player:commit:message:chatkey:width"
+                "button:content:action": "panel:request:player:options"
             };
+            if (chatOn) {
+                /* Repurpose player OSD buttons as chat controls with remote-key
+                   shortcuts. Arrows are reserved by MSX for navigation, red for
+                   player restart and blue for the menu, so:
+                   green = chat on/off, yellow = position, channel up = height,
+                   channel down = width. */
+                data.properties["button:prev:icon"] = "chat";
+                data.properties["button:prev:key"] = "green";
+                data.properties["button:prev:action"] = "player:commit:message:chatkey:toggle";
+                data.properties["button:next:icon"] = "swap-horiz";
+                data.properties["button:next:key"] = "yellow";
+                data.properties["button:next:action"] = "player:commit:message:chatkey:pos";
+                data.properties["button:speed:icon"] = "unfold-more";
+                data.properties["button:speed:key"] = "channel_up";
+                data.properties["button:speed:action"] = "player:commit:message:chatkey:height";
+                data.properties["button:rewind:icon"] = "settings-ethernet";
+                data.properties["button:rewind:key"] = "channel_down";
+                data.properties["button:rewind:action"] = "player:commit:message:chatkey:width";
+            }
         }
         TVXInteractionPlugin.stopLoading();
         TVXInteractionPlugin.executeAction(action, data);
@@ -811,7 +827,16 @@
         Twitch.playbackToken(channel, null, function (err, token) {
             if (err) { playFailed(err); return; }
             var playerLabel = label + " — " + (title || "LIVE");
-            resolveQualityAndPlay(Twitch.liveUrl(channel, token), playerLabel, { channel: channel, cid: cid });
+            var directUrl = Twitch.liveUrl(channel, token);
+            var extra = { channel: channel, cid: cid };
+            var adblock = store.get("adblock", "off");
+            var primaryUrl = directUrl;
+            if (adblock !== "off") {
+                /* Ad-free proxy first; fall back to direct (ad-supported) on failure */
+                primaryUrl = Twitch.liveUrlProxy(channel, token, adblock);
+                extra.fallback = directUrl;
+            }
+            resolveQualityAndPlay(primaryUrl, playerLabel, extra);
         });
     }
 

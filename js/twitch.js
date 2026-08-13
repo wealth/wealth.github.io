@@ -364,6 +364,24 @@ var Twitch = (function () {
         return USHER_BASE + "/api/channel/hls/" + encodeURIComponent(login.toLowerCase()) + ".m3u8" + usherParams(token);
     }
 
+    /*
+     * Ad-block: fetch the HLS playlist through a token-passing proxy instead of
+     * usher directly. The proxy requests the stream in a way Twitch doesn't
+     * serve mid-roll ads to, so the "commercial break" placeholder is avoided.
+     * Same URL shape as usher (channel + token + sig), just a different host.
+     * Public proxies rotate/go down — always keep the direct liveUrl() as a
+     * fallback (the player retries with it on error).
+     */
+    var AD_PROXIES = {
+        ontdb: "https://api1080.ontdb.com/",
+        kwabang: "https://api.twitch.hkg.kwabang.net/hls-raw/"
+    };
+
+    function liveUrlProxy(login, token, which) {
+        var base = AD_PROXIES[which] || AD_PROXIES.ontdb;
+        return base + encodeURIComponent(login.toLowerCase()) + ".m3u8" + usherParams(token);
+    }
+
     function vodUrl(vodId, token) {
         return USHER_BASE + "/vod/" + encodeURIComponent(String(vodId)) + ".m3u8" + usherParams(token);
     }
@@ -437,6 +455,7 @@ var Twitch = (function () {
         search: search,
         playbackToken: playbackToken,
         liveUrl: liveUrl,
+        liveUrlProxy: liveUrlProxy,
         vodUrl: vodUrl,
         parseMaster: parseMaster,
         pickVariant: pickVariant,
