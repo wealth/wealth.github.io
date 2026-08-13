@@ -121,32 +121,36 @@ var Twitch = (function () {
     }
 
     /*
-     * "Recommended" = Twitch's own "Live channels we think you'll like" shelf
-     * from the homepage (GQL personalSections, RECOMMENDED_SECTION). This is the
-     * account-personalized recommendation, read with the user's token. Logged
-     * out (or if it comes back empty), Twitch/we fall back to popular/top.
+     * "Recommended" = Twitch's own side-nav "Live channels we think you'll like"
+     * feed (the SideNav GQL operation with followSortOrder: RECS). This is the
+     * account-personalized recommendation the web sidebar shows. Needs the user's
+     * token + an X-Device-ID header (sent by gqlAuth). Personalization requires
+     * the account to be recognised; otherwise Twitch returns popular channels,
+     * and we fall back to global top if the query is empty or errors.
      */
     function recommendedStreams(callback) {
-        var q = "query { personalSections(input: {sectionInputs: [RECOMMENDED_SECTION]}) { type items { ... on PersonalSectionChannel { user { id login displayName stream { id title viewersCount previewImageURL(width: 440, height: 248) game { id displayName } } } } } } }";
+        var q = "query { sideNav(input: {recommendationContext: {platform: \"web\", clientApp: \"twilight\", location: \"home\"}, followSortOrder: RECS}) { sections { edges { node { content { edges { node { ... on Stream { id viewersCount previewImageURL(width: 440, height: 248) broadcaster { id login displayName broadcastSettings { title } } game { id displayName } } } } } } } } } }";
         gqlAuth(q, function (err, data) {
-            if (err || !data || !data.personalSections) { topStreams(null, callback); return; }
-            var sections = data.personalSections;
+            var sn = data ? data.sideNav : null;
+            if (err || !sn || !sn.sections) { topStreams(null, callback); return; }
             var items = [];
             var seen = {};
-            for (var s = 0; s < sections.length; s++) {
-                var its = sections[s].items || [];
-                for (var i = 0; i < its.length; i++) {
-                    var u = its[i].user;
-                    var st = u ? u.stream : null;
-                    if (u && st && !seen[u.login]) {
-                        seen[u.login] = true;
+            var sedges = sn.sections.edges || [];
+            for (var s = 0; s < sedges.length; s++) {
+                var content = sedges[s].node ? sedges[s].node.content : null;
+                var cedges = content && content.edges ? content.edges : [];
+                for (var i = 0; i < cedges.length; i++) {
+                    var st = cedges[i].node;
+                    if (st && st.broadcaster && !seen[st.broadcaster.login]) {
+                        seen[st.broadcaster.login] = true;
+                        var bs = st.broadcaster.broadcastSettings || {};
                         items.push({
                             id: st.id,
-                            title: st.title,
+                            title: bs.title || "",
                             viewersCount: st.viewersCount,
                             previewImageURL: st.previewImageURL,
                             game: st.game ? { name: st.game.displayName, displayName: st.game.displayName } : { name: "", displayName: "" },
-                            broadcaster: { id: u.id, login: u.login, displayName: u.displayName }
+                            broadcaster: { id: st.broadcaster.id, login: st.broadcaster.login, displayName: st.broadcaster.displayName }
                         });
                     }
                 }
@@ -171,6 +175,8 @@ var Twitch = (function () {
             req.setRequestHeader("Client-ID", TwitchAuth.clientId());
             req.setRequestHeader("Authorization", "OAuth " + TwitchAuth.token());
             req.setRequestHeader("Content-Type", "application/json");
+            /* Some personalized queries (recommendations) require a device id */
+            if (TwitchAuth.deviceId) { req.setRequestHeader("X-Device-ID", TwitchAuth.deviceId()); }
             req.onreadystatechange = function () {
                 if (req.readyState === 4) {
                     if (req.status >= 200 && req.status < 300) {

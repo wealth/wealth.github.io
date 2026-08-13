@@ -207,6 +207,19 @@ var TwitchAuth = (function () {
         saveAuth();
     }
 
+    /* Stable per-install device id (Twitch personalized queries want X-Device-ID) */
+    function deviceId() {
+        var id = null;
+        try { id = window.localStorage.getItem("stv:deviceid"); } catch (e) { }
+        if (!id || id.length < 16) {
+            var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            id = "";
+            for (var i = 0; i < 32; i++) { id += chars.charAt(Math.floor(Math.random() * chars.length)); }
+            try { window.localStorage.setItem("stv:deviceid", id); } catch (e) { }
+        }
+        return id;
+    }
+
     loadAuth();
 
     return {
@@ -216,6 +229,7 @@ var TwitchAuth = (function () {
         displayName: function () { return auth ? (auth.display || auth.login) : null; },
         token: function () { return auth ? auth.access_token : null; },
         clientId: function () { return CLIENT_ID; },
+        deviceId: deviceId,
         ensureToken: ensureToken,
         startDeviceLogin: startDeviceLogin,
         cancelLogin: stopPolling,
