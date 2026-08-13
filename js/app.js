@@ -8,7 +8,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.5.8";
+    var VERSION = "1.5.9";
     var PLUGIN_URL = window.location.protocol + "//" + window.location.host + window.location.pathname;
     var PLAYER_URL = PLUGIN_URL.replace(/[^\/]*$/, "") + "player.html";
     var MAX_INPUT_LENGTH = 30;
