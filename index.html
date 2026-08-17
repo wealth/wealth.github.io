@@ -29,6 +29,18 @@
 
     <link rel="stylesheet" href="css/app.css?v=4.56">
     <link rel="stylesheet" href="plugins/twitch.css?v=1.0.0">
+    <script>
+        /* When this file is opened from jsDelivr (text/plain on desktop, sniffed as
+           HTML on old TVs), keep relative script/css URLs on the CDN. */
+        (function () {
+            var h = location.hostname || "";
+            if (h.indexOf("jsdelivr.net") >= 0) {
+                var b = document.createElement("base");
+                b.href = location.href.replace(/index\.html(?:\?.*)?$/, "");
+                document.head.insertBefore(b, document.head.firstChild);
+            }
+        })();
+    </script>
 </head>
 <body style="background: #1d1f20;">
     <script>

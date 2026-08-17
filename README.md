@@ -49,7 +49,9 @@ On a TV, GitHub Pages often fails MSX’s XHR with **Server responded with 0** (
 2. Turn the **security lock / HTTPS** option **on**
 3. Enter: `id:trl:26eramdf`
 
-That loads `msx/start.json` from jsDelivr, then opens Lampa.
+That loads the start JSON from jsDelivr (Cloudflare). You should land on an **Open Lampa** card — press OK.
+
+`wealth.github.io` hangs ~60s on this TV (timeout, not “host not found”). The card opens Lampa from the same CDN instead.
 
 Browser test:
 
