@@ -43,20 +43,15 @@ Not affiliated with Twitch, Amazon, or Lampa’s authors.
 
 ## Install for MSX
 
-MSX setup (same as the old Smart Twitch TV app in this repo):
+MSX on this TV can no longer finish an XHR to `wealth.github.io` (about a minute, then status 0). The old app still launched because after that JSON fetch it used `link:https://wealth.github.io/tv/` (webview, not XHR).
+
+Do not enter `wealth.github.io` as the host. Use:
 
 1. **Settings → Start Parameter → Setup**
 2. **HTTPS lock ON**
-3. Enter `wealth.github.io`
+3. Enter `id:trl:26eramdf`
 
-`msx/start.json` is the same shape that already worked here:
-
-```json
-"parameter": "content:https://wealth.github.io/msx/start.json",
-"action": "link:https://wealth.github.io/"
-```
-
-lampa.mx uses `http://` because *their* host still serves HTTP. This fork does not require HTTP; GitHub Pages is HTTPS-only, which is what the old app used.
+That loads start JSON from jsDelivr (this already succeeded on the TV). The start action is `link:https://wealth.github.io/` — same kind of open as the old `/tv/` app.
 
 ## Docker
 

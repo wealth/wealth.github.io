@@ -2,6 +2,7 @@
 	"type": "pages",
 	"headline": "Lampa",
 	"cache": false,
+	"action": "link:https://wealth.github.io/",
 	"pages": [
 		{
 			"items": [
@@ -11,9 +12,9 @@
 					"layout": "2,1,8,4",
 					"color": "msx-black-soft",
 					"icon": "movie",
-					"headline": "Open Lampa",
-					"text": "Press OK.{br}Uses a CDN so the TV does not talk to github.io (that request hangs for about a minute).",
-					"action": "link:https://cdn.jsdelivr.net/gh/wealth/wealth.github.io@main/index.html"
+					"headline": "Lampa",
+					"text": "Press OK to open.",
+					"action": "link:https://wealth.github.io/"
 				}
 			]
 		}
