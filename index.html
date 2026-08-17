@@ -65,6 +65,10 @@
     <script src="./vender/navigator/navigator.js"></script>
     <script src="./vender/keypad/keypad.js"></script>
 
+    <!-- Strip ads + CUB telemetry and route TMDB direct. Must run after jQuery
+         and before app.min.js so it can wrap $.ajax first. -->
+    <script src="./js/nocub.js"></script>
+
     <script>
         var lampa_url     = '';
         var cache_version = Math.floor((new Date()).getTime() / 9e5); // Новое значение каждые 15 минут
