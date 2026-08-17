@@ -57,7 +57,17 @@
             var url = opts.url || (typeof a === "string" ? a : "");
 
             if (isBlocked(url)) {
-                var res = opts.dataType === "text" ? "" : { ad: [], secuses: true };
+                // Empty response shaped to satisfy every caller: an array
+                // (so result.map() works for plugin lists) that also carries
+                // .ad (so the ad code sees no prerolls) and .secuses.
+                var res;
+                if (opts.dataType === "text") {
+                    res = "";
+                } else {
+                    res = [];
+                    res.ad = [];
+                    res.secuses = true;
+                }
                 var d = $.Deferred();
                 try { if (opts.success) opts.success(res, "success", null); } catch (e) {}
                 try { if (opts.complete) opts.complete(null, "success"); } catch (e) {}
