@@ -43,23 +43,20 @@ Not affiliated with Twitch, Amazon, or Lampa’s authors.
 
 ## Install for MSX
 
-On a TV, GitHub Pages often fails MSX’s XHR with **Server responded with 0** (no CORS preflight, or the TV cannot verify `github.io` TLS). Use the CDN start id instead — the on-screen keyboard can type it (letters and digits only):
+This TV can load **HTTP** (same as [lampa.mx](http://lampa.mx)) but not GitHub Pages / jsDelivr **HTTPS** (minute-long timeout, then “check connection”). lampa.mx’s start file is:
 
-1. MSX → **Settings → Start Parameter → Setup**
-2. Turn the **security lock / HTTPS** option **on**
-3. Enter: `id:trl:26eramdf`
-
-That loads the start JSON from jsDelivr (Cloudflare). You should land on an **Open Lampa** card — press OK.
-
-`wealth.github.io` hangs ~60s on this TV (timeout, not “host not found”). The card opens Lampa from the same CDN instead.
-
-Browser test:
-
-```
-https://msx.benzac.de/?start=content:https://cdn.jsdelivr.net/gh/wealth/wealth.github.io@main/msx/home.json
+```json
+"parameter": "content:http://lampa.mx/msx/start.json",
+"action": "link:http://lampa.mx"
 ```
 
-If you are on a device that *can* fetch GitHub Pages, `wealth.github.io` with the HTTPS lock still works.
+GitHub Pages cannot speak HTTP, so on the TV use a LAN server the same way:
+
+```
+npx http-server . -p 8080 --cors -a 0.0.0.0
+```
+
+Then in MSX: **Settings → Start Parameter → Setup**, **HTTPS lock OFF**, enter `192.168.x.x:8080` (this Mac is `192.168.3.201`).
 
 ## Docker
 

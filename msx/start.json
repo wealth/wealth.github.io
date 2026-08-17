@@ -1,10 +1,6 @@
 {
 	"name": "Lampa",
 	"version": "latest",
-	"parameter": "content:https://cdn.jsdelivr.net/gh/wealth/wealth.github.io@main/msx/home.json",
-	"welcome": "none",
-	"launcher": {
-		"icon": "movie",
-		"color": "msx-black-soft"
-	}
+	"parameter": "content:http://{SERVER}/msx/start.json",
+	"action": "link:http://{SERVER}"
 }
