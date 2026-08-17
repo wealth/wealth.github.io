@@ -43,18 +43,21 @@ Not affiliated with Twitch, Amazon, or Lampa’s authors.
 
 ## Install for MSX
 
-1. Host this repo (GitHub Pages works; this user site is `https://wealth.github.io`).
-2. If the host is not `wealth.github.io`, change the HTTPS URLs in `msx/start.json`.
-3. Install **Media Station X** → **Settings → Start Parameter → Setup**.
-4. **Turn the security lock / HTTPS option on**, then enter `wealth.github.io` (no `https://`, no path).
+On a TV, GitHub Pages often fails MSX’s XHR with **Server responded with 0** (no CORS preflight, or the TV cannot verify `github.io` TLS). Use the CDN start id instead — the on-screen keyboard can type it (letters and digits only):
 
-GitHub Pages is HTTPS-only. Without the lock, MSX requests `http://…` and GitHub’s redirect shows up on TVs as **Server responded with 0**.
+1. MSX → **Settings → Start Parameter → Setup**
+2. Turn the **security lock / HTTPS** option **on**
+3. Enter: `id:trl:26eramdf`
 
-Test in a browser:
+That loads `msx/start.json` from jsDelivr, then opens Lampa.
+
+Browser test:
 
 ```
-https://msx.benzac.de/?start=content:https://wealth.github.io/msx/start.json
+https://msx.benzac.de/?start=content:https://cdn.jsdelivr.net/gh/wealth/wealth.github.io@main/msx/home.json
 ```
+
+If you are on a device that *can* fetch GitHub Pages, `wealth.github.io` with the HTTPS lock still works.
 
 ## Docker
 

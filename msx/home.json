@@ -1,0 +1,22 @@
+{
+	"type": "pages",
+	"headline": "Lampa",
+	"cache": false,
+	"action": "[settings:validate_links:0|link:https://wealth.github.io/]",
+	"pages": [
+		{
+			"items": [
+				{
+					"id": "lampa",
+					"type": "default",
+					"layout": "2,1,8,4",
+					"color": "msx-black-soft",
+					"icon": "movie",
+					"headline": "Lampa",
+					"text": "Movies, series and Twitch.{br}Press OK to open.",
+					"action": "link:https://wealth.github.io/"
+				}
+			]
+		}
+	]
+}
