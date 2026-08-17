@@ -49,7 +49,7 @@ Do not enter `wealth.github.io` as the host. Use:
 
 1. **Settings → Start Parameter → Setup**
 2. **HTTPS lock ON**
-3. Enter `id:trl:26eramdf`
+3. Enter `id:trl:25ppzp63`
 
 That loads start JSON from jsDelivr (this already succeeded on the TV). The start action is `link:https://wealth.github.io/` — same kind of open as the old `/tv/` app.
 
