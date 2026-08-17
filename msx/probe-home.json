@@ -1,0 +1,22 @@
+{
+	"type": "pages",
+	"headline": "MSX Probe",
+	"cache": false,
+	"action": "link:https://wealth.github.io/msx/probe.html",
+	"pages": [
+		{
+			"items": [
+				{
+					"id": "probe",
+					"type": "default",
+					"layout": "2,1,8,4",
+					"color": "msx-green",
+					"icon": "check-circle",
+					"headline": "Open probe page",
+					"text": "Loads a tiny github.io page (no redirect).{br}Press OK if it does not open by itself.",
+					"action": "link:https://wealth.github.io/msx/probe.html"
+				}
+			]
+		}
+	]
+}
