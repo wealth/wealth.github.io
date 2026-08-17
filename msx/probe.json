@@ -1,5 +1,0 @@
-{
-	"name": "MSX Probe",
-	"version": "1.0",
-	"parameter": "content:https://cdn.jsdelivr.net/gh/wealth/wealth.github.io@main/msx/probe-home.json"
-}

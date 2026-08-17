@@ -2,7 +2,7 @@
 	"type": "pages",
 	"headline": "Lampa",
 	"cache": false,
-	"action": "link:https://wealth.github.io/",
+	"action": "link:https://lampa.demitori.com/",
 	"pages": [
 		{
 			"items": [
@@ -14,7 +14,7 @@
 					"icon": "movie",
 					"headline": "Lampa",
 					"text": "Press OK to open.",
-					"action": "link:https://wealth.github.io/"
+					"action": "link:https://lampa.demitori.com/"
 				}
 			]
 		}

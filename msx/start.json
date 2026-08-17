@@ -1,7 +1,7 @@
 {
 	"name": "Lampa",
 	"version": "latest",
-	"parameter": "content:https://cdn.jsdelivr.net/gh/wealth/wealth.github.io@ede6a0b/msx/home.json",
-	"action": "link:https://wealth.github.io/",
+	"parameter": "content:https://lampa.demitori.com/msx/home.json",
+	"action": "link:https://lampa.demitori.com/",
 	"welcome": "none"
 }

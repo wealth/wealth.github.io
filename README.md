@@ -43,15 +43,26 @@ Not affiliated with Twitch, Amazon, or Lampa’s authors.
 
 ## Install for MSX
 
-MSX on this TV can no longer finish an XHR to `wealth.github.io` (about a minute, then status 0). The old app still launched because after that JSON fetch it used `link:https://wealth.github.io/tv/` (webview, not XHR).
+This TV's MSX webview can't reach GitHub's Fastly edge (`wealth.github.io`, `185.199.x`): connections hang ~60s and fail with **status 0 / operation timed out**. It reaches Cloudflare fine. Proven with an A/B probe: the *same* static page opened via a Cloudflare CDN but timed out via github.io. So the app is served through a **Cloudflare-proxied domain that fronts GitHub Pages** — the TV only ever talks to Cloudflare.
 
-Do not enter `wealth.github.io` as the host. Use:
+On the TV:
 
 1. **Settings → Start Parameter → Setup**
 2. **HTTPS lock ON**
-3. Enter `id:trl:25gxntw2`
+3. Enter `lampa.demitori.com`
 
-That loads start JSON from jsDelivr (this already succeeded on the TV). The start action is `link:https://wealth.github.io/` — same kind of open as the old `/tv/` app.
+MSX fetches `https://lampa.demitori.com/msx/start.json` and opens the app with `link:https://lampa.demitori.com/`. No TinyURL or jsDelivr needed — it's one Cloudflare origin, same-origin throughout.
+
+### Cloudflare + GitHub Pages (one-time)
+
+GitHub Pages stays the origin; Cloudflare proxies the host so the TV never hits Fastly.
+
+1. **Cloudflare → DNS**: add `CNAME  lampa → wealth.github.io`, **grey-cloud (DNS only)** for now.
+2. Push this repo (the `CNAME` file sets the custom domain). **GitHub → Settings → Pages**: wait for the TLS certificate to be issued, then enable **Enforce HTTPS**.
+3. **Cloudflare → DNS**: flip the record to **orange-cloud (Proxied)**.
+4. **Cloudflare → SSL/TLS**: set the mode to **Full**.
+
+Only the bokeh background images still load from `yumata.github.io` (cosmetic, non-blocking).
 
 ## Docker
 
