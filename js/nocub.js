@@ -19,14 +19,24 @@
     // Any cub host: cub.rip / cub.red / cub.watch and subdomains.
     var CUB = /\/\/([a-z0-9-]+\.)*cub\.(rip|red|watch)\b/i;
 
-    // Rewrite cub TMDB mirrors -> TMDB source, and the upstream bokeh
-    // backgrounds (yumata.github.io, unreachable on this TV) -> local copies.
+    // TMDB reverse proxy (Cloudflare Worker) — this TV geo-blocks TMDB
+    // directly (CloudFront/BunnyCDN), so route metadata + posters through a
+    // Cloudflare host it CAN reach. Worker code: worker/tmdb-proxy.js.
+    // Set TMDB_PROXY to "" to go straight to TMDB (only where reachable).
+    var TMDB_PROXY = "https://tmdb.demitori.com";
+    var TMDB_API = (TMDB_PROXY || "https://api.themoviedb.org") + "/3/";
+    var TMDB_IMG = (TMDB_PROXY || "https://image.tmdb.org") + "/";
+
+    // Rewrite cub TMDB mirrors (and any direct TMDB host) -> the proxy, and the
+    // upstream bokeh backgrounds (yumata.github.io, dead on this TV) -> local.
     function toDirect(url) {
         return String(url || "")
-            .replace(/https?:\/\/apitmdb\.[^\/]+\/3\//i, "https://api.themoviedb.org/3/")
-            .replace(/https?:\/\/(?:[a-z0-9-]+\.)?imagetmdb\.com\//i, "https://image.tmdb.org/")
-            .replace(/https?:\/\/lampa\.byskaz\.ru\/tmdb\/api\/3\//i, "https://api.themoviedb.org/3/")
-            .replace(/https?:\/\/lampa\.byskaz\.ru\/tmdb\/img\//i, "https://image.tmdb.org/")
+            .replace(/https?:\/\/apitmdb\.[^\/]+\/3\//i, TMDB_API)
+            .replace(/https?:\/\/api\.themoviedb\.org\/3\//i, TMDB_API)
+            .replace(/https?:\/\/lampa\.byskaz\.ru\/tmdb\/api\/3\//i, TMDB_API)
+            .replace(/https?:\/\/(?:[a-z0-9-]+\.)?imagetmdb\.com\//i, TMDB_IMG)
+            .replace(/https?:\/\/image\.tmdb\.org\//i, TMDB_IMG)
+            .replace(/https?:\/\/lampa\.byskaz\.ru\/tmdb\/img\//i, TMDB_IMG)
             .replace(/https?:\/\/yumata\.github\.io\/lampa\/img\//i, location.origin + "/img/");
     }
 
