@@ -19,13 +19,15 @@
     // Any cub host: cub.rip / cub.red / cub.watch and subdomains.
     var CUB = /\/\/([a-z0-9-]+\.)*cub\.(rip|red|watch)\b/i;
 
-    // Rewrite cub TMDB mirrors -> TMDB source.
+    // Rewrite cub TMDB mirrors -> TMDB source, and the upstream bokeh
+    // backgrounds (yumata.github.io, unreachable on this TV) -> local copies.
     function toDirect(url) {
         return String(url || "")
             .replace(/https?:\/\/apitmdb\.[^\/]+\/3\//i, "https://api.themoviedb.org/3/")
             .replace(/https?:\/\/(?:[a-z0-9-]+\.)?imagetmdb\.com\//i, "https://image.tmdb.org/")
             .replace(/https?:\/\/lampa\.byskaz\.ru\/tmdb\/api\/3\//i, "https://api.themoviedb.org/3/")
-            .replace(/https?:\/\/lampa\.byskaz\.ru\/tmdb\/img\//i, "https://image.tmdb.org/");
+            .replace(/https?:\/\/lampa\.byskaz\.ru\/tmdb\/img\//i, "https://image.tmdb.org/")
+            .replace(/https?:\/\/yumata\.github\.io\/lampa\/img\//i, location.origin + "/img/");
     }
 
     // Calls we drop entirely (no network hit, benign empty response).
@@ -106,6 +108,19 @@
     }
     patchSrc(HTMLImageElement.prototype, false);
     patchSrc(HTMLScriptElement.prototype, true);
+
+    // Some loaders set src via setAttribute (which bypasses the property
+    // setter) — the cub plugin loader (sport/tsarea/shots) does. Catch that too.
+    try {
+        var realSetAttr = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function (name, value) {
+            if (name === "src" && (this.tagName === "SCRIPT" || this.tagName === "IMG")) {
+                value = toDirect(value);
+                if (this.tagName === "SCRIPT" && CUB.test(value)) value = "data:text/javascript,";
+            }
+            return realSetAttr.call(this, name, value);
+        };
+    } catch (e) {}
 
     /* 3) Once Lampa is up, override TMDB.api/image at the source too. */
     var tries = 0;
