@@ -42,6 +42,10 @@ var StvChat = (function () {
     /* ------------------------------------------------------------------ */
 
     function getStore(key, def) {
+        if (window.Lampa && Lampa.Storage) {
+            var mapped = Lampa.Storage.get("twitch_" + key, "");
+            if (mapped !== "" && mapped != null) { return String(mapped); }
+        }
         try {
             var value = window.localStorage.getItem("stv:" + key);
             return value == null ? def : value;
@@ -49,6 +53,9 @@ var StvChat = (function () {
     }
 
     function setStore(key, value) {
+        if (window.Lampa && Lampa.Storage) {
+            try { Lampa.Storage.set("twitch_" + key, value); } catch (e) { }
+        }
         try { window.localStorage.setItem("stv:" + key, value); } catch (e) { }
     }
 
@@ -105,7 +112,8 @@ var StvChat = (function () {
             msgsEl.className = "stv-msgs";
             container.appendChild(headerEl);
             container.appendChild(msgsEl);
-            document.body.appendChild(container);
+            var host = document.querySelector(".player") || document.body;
+            host.appendChild(container);
             renderHeader();
         }
         applyStyle();

@@ -1,123 +1,72 @@
-# Smart Twitch TV for Media Station X
+# Lampa + Twitch
 
-An unofficial Twitch client that runs inside [Media Station X](https://msx.benzac.de/info/) on LG webOS TVs (and any other platform MSX supports — Samsung Tizen, Android TV, Fire TV, etc.).
+A fork of [Lampa](https://github.com/yumata/lampa) with **Twitch as a first-class sidebar section**.
 
-Inspired by [SmartTwitchTV](https://github.com/fgl27/smarttwitchtv) for Android. This is a from-scratch web port for the MSX platform — no Android code involved.
+Lampa is a free media catalog for Smart TVs (movies and series via public metadata). This fork keeps that app and adds the unofficial Twitch client that used to live in this repo as a standalone Media Station X plugin.
 
-## Features
+Sources for Lampa itself: [yumata/lampa-source](https://github.com/yumata/lampa-source).
 
-- **Optional Twitch account login** — connect your account to see the channels **you follow** (live) and **recommended** streams
-  - Sign-in uses Twitch's official **device code flow**: the TV shows a short code, you enter it at [twitch.tv/activate](https://www.twitch.tv/activate) on your phone or computer — no typing a password on the TV
-  - Read-only (`user:read:follows` scope); browsing/search/favorites/playback all still work without logging in
-- **Chat overlay on video** — live Twitch chat rendered over the stream, with **7TV and BetterTTV emotes** (global + per-channel) plus native Twitch emotes, colored usernames, and flood protection
-  - **Position** (left / right), **height from bottom** (full / 75% / 50% / 25%), **width** (30–10% of screen), and **text size** — all switchable in Settings and live during playback
-  - **Live viewer count** at the top of the chat (refreshed every minute; Twitch locks the chatters-only count behind bot protection, so viewers is shown)
-  - Anonymous IRC-over-WebSocket connection, no login needed
-- **Player controls show the stream title** (not just the streamer name) and the **total stream uptime** in the corner, ticking live
-- **Top streams** — browse the most-viewed live channels, with previews, viewer counts, and games
-- **Games** — top categories with box art; open a game to see its live streams
-- **Search** — on-screen keyboard (remote-friendly), finds channels and games as you type
-- **Channel pages** — live preview, stream title, game, uptime, follower count, watch button
-- **Recent videos (VODs)** — play past broadcasts of any channel
-- **Favorites** — your own followed-channels list, stored on the TV, live channels sorted first (no Twitch login needed)
-- **Settings** — chat overlay, preferred stream quality, and player selection
-- Uses Twitch's public GQL API anonymously — no login, no API key, no backend server. All requests go directly from the TV to Twitch.
+#### Devices
 
-## Repository layout
+* LG WebOS
+* Samsung Tizen
+* MSX
+* Android
+* MacOS
+* Windows
 
-```
-msx/start.json   MSX start parameter file (entry point)
-main.html        Interaction plugin (the app shell MSX loads)
-js/auth.js       Twitch account login (OAuth device code flow)
-js/twitch.js     Twitch API layer (GQL — anonymous, plus user-token for logged-in data)
-js/app.js        UI: menu, pages, cards, search, favorites, login, settings, playback
-player.html      Video player page with the chat overlay (native HLS + hls.js fallback)
-js/player.js     Player logic (video + chat options panel)
-js/chat.js       Chat overlay: Twitch IRC over WebSocket, 7TV/BTTV/Twitch emotes
-```
+## Twitch section
 
-Everything is static files — host them on any web server.
+Open **Twitch** in the Lampa sidebar.
 
-## Setup on an LG TV (webOS)
+- **Top streams** and **Games** (open a game to see its live channels)
+- **Search** for channels and games
+- **Favorites** stored on the device
+- **Channel pages** with recent VODs
+- **Optional Twitch login** (device code at [twitch.tv/activate](https://www.twitch.tv/activate)) for **Following** and **Recommended**
+- **Chat overlay** on live playback (Twitch / 7TV / BTTV emotes)
+- Settings under **Settings → Twitch**: chat layout, quality, regional ad-block playlist proxies
 
-1. **Host these files** somewhere the TV can reach:
-   - **GitHub Pages (easiest):** push this repo to GitHub, enable Pages. Your app lives at `https://<user>.github.io/<repo>/`.
-   - **Local server on your LAN:**
-     ```
-     npx http-server /path/to/smart-twitch-tv-msx -p 8080 --cors
-     ```
-     (Any static server works; CORS headers are recommended so the MSX app can fetch `start.json`.)
+Long-press a live card to open the channel page. Playback uses Lampa’s player.
 
-2. **Install "Media Station X"** from the LG Content Store on the TV.
-
-3. Open Media Station X → **Settings → Start Parameter → Setup**, and enter the location, without protocol:
-   - GitHub Pages: `<user>.github.io` (choose the **security lock/https** option when asked)
-   - Local server: `192.168.x.x:8080` (your computer's IP)
-
-   MSX then loads `<host>/msx/start.json` and starts the app.
-
-   **Note:** the MSX on-screen keyboard has no `/`, so the app must be hosted at the **root** of a host — use the GitHub Pages *user site* repo (named exactly `<user>.github.io`), not a project repo with a path.
-
-4. If you host somewhere else, edit [msx/start.json](msx/start.json) and set the parameter to the full absolute URL of `main.html` at your host, e.g.:
-   ```json
-   "parameter": "menu:request:interaction:init@https://your.host/main.html"
-   ```
-
-## Signing in
-
-Open **Connect account** in the menu. The TV shows a code; go to [twitch.tv/activate](https://www.twitch.tv/activate) on any device, sign in to Twitch, and enter the code. The TV picks it up automatically and adds **Following** and **Recommended** to the menu. Your session is remembered; **Log out** is under the account menu item.
-
-Notes:
-- Login uses a **registered Twitch application** client-ID (device flow, read-only). This is required: Twitch gates its *first-party* web client behind an anti-bot integrity check on personalized data, so followed/recommended lists come back empty for it. The bundled client-ID is reused from the open-source SmartTwitchTV app (published as reusable); to use your own, create one at [dev.twitch.tv/console](https://dev.twitch.tv/console) and set `CLIENT_ID` in [js/auth.js](js/auth.js). Anonymous browsing/search/playback still use Twitch's public web client — no login needed.
-- **Following** shows channels you follow that are **live right now**. **Recommended** = top live streams across the game categories you follow (falling back to the categories your live follows are playing, then global top streams).
-- If your session can't be refreshed (Twitch expires it), the app quietly signs you out — just connect again.
-
-## Remote control quick reference
-
-- **OK** on a live stream card → plays immediately (no intermediate page)
-- **Options/menu key** on a card → "Channel & videos" (channel page with recent VODs); offline channels open it directly
-- **Back** → previous page / stop playback
-
-### During playback
-
-- **OK** → player controls (with stream title and total stream time)
-- **Green** → chat on/off
-- **Yellow** → chat position left/right
-- **Channel up** → chat height (Full → 75% → 50% → 25%)
-- **Channel down** → chat width (30% → 25% → 20% → 15% → 10%)
-- **Settings icon** in the player controls → options panel: **add/remove favorite**, chat toggle, position, height, width, text size
-
-(Arrow keys are reserved by the Media Station X player for navigation and seeking, and red/blue for restart/menu — so chat shortcuts live on the green/yellow and channel keys.)
-
-Changes apply instantly and are remembered. The same chat options are available app-wide under **Settings**.
-
-## Settings notes
-
-- **Chat overlay** — when On, live streams play through the bundled player page so chat can be drawn over the video (native HLS first, hls.js as automatic fallback). When Off, playback uses the player selected below.
-- **Stream quality** — `Auto` hands Twitch's adaptive master playlist to the player (recommended on TVs). Fixed qualities (Source/720p/…) require reading the playlist from the TV browser; on platforms where Twitch's CDN blocks that (CORS), playback silently falls back to Auto.
-- **Block ads** — avoids the "commercial break in progress" placeholder by fetching the live playlist through a **playlist proxy** that requests the stream from an ad-free region, so Twitch doesn't stitch its (server-side) ads in. Off by default. Because different regions get different ad campaigns, several proxies are offered (Europe / North America / Asia) — **try each and keep whichever removes the ads for you**; availability also varies over time. These use the maintained [TTV-LOL-PRO v1](https://github.com/younesaassila/ttv-lol-pro) endpoints (cdn-perfprod / luminous); the proxy fetches its own anonymous token, so **your account login is never sent to it**. Live streams play through the bundled player, which **automatically falls back to normal (ad-supported) playback** if the proxy is down or blocked, so the stream still starts either way. Note: these are public community proxies, not affiliated with this app or Twitch, and pre-roll ads on some channels may still appear.
-- **Player (chatless playback)** — `TV player` uses the TV's native HLS support via MSX (recommended on webOS). `App player` is the bundled [player.html](player.html) without chat. Note: desktop browsers can't fetch Twitch streams at all due to Twitch CDN CORS policy — that's a Twitch restriction, not a bug; on TVs native playback is unaffected (chat still works everywhere).
-
-## Testing in a desktop browser
-
-The MSX web shell can run the app on your computer:
+Twitch code lives in:
 
 ```
-https://msx.benzac.de/?start=menu:request:interaction:init@https://<your-host>/main.html
+plugins/twitch.js   Lampa section (menu, catalog, channel, login, player hook)
+plugins/twitch.css  Cards, channel page, chat overlay
+js/twitch.js        Twitch GQL / playback
+js/auth.js          OAuth device-code login
+js/chat.js          IRC chat overlay
 ```
 
-The plugin URL must be **https** (the shell upgrades http URLs). For localhost you'll need a self-signed certificate and to accept it in the browser first. Browsing, search, and favorites fully work on desktop; **video playback works only on real TVs** (Twitch's CDN only allows twitch.tv web origins to read streams via JavaScript — TVs play them natively instead).
+Not affiliated with Twitch, Amazon, or Lampa’s authors.
 
-## If Twitch requests start failing
+## Install for MSX
 
-Twitch occasionally rotates its public web Client-ID. The app tries several known IDs automatically (see `CLIENT_IDS` in [js/twitch.js](js/twitch.js)). If all of them stop working, grab the current one:
+You need your own hosting or a local web server.
+
+1. Host this repo (GitHub Pages works; this user site is `https://wealth.github.io`).
+2. Open `msx/start.json` and set the host if you are not using `wealth.github.io`.
+3. Install **Media Station X**, then set the start parameter to that host (no `https://`).
+
+MSX loads `/msx/start.json` and opens Lampa via `link:`.
+
+## Docker
+
+1. Put your host in `msx/start.json`.
+2. `docker build -t lampa .`
+3. `docker run -p 8080:80 -d --restart unless-stopped --name lampa lampa`
+
+## Run locally
 
 ```
-curl -s https://www.twitch.tv/ | grep -oE 'clientId="[^"]+"'
+npx http-server . -p 8080 --cors
 ```
 
-and put it first in the `CLIENT_IDS` array.
+Open `http://localhost:8080`. Twitch browsing works in a desktop browser; **live video usually only plays on a real TV** (Twitch CDN CORS).
 
-## Disclaimer
+## Upstream
 
-Unofficial hobby project. Not affiliated with, endorsed by, or supported by Twitch Interactive, Amazon, LG, or Media Station X. Uses the publicly reachable Twitch API the same way a web browser does; no ads are removed and no paywalls are bypassed. Credits: [fgl27/smarttwitchtv](https://github.com/fgl27/smarttwitchtv) for the inspiration, [Benjamin Zachey](https://msx.benzac.de/info/) for Media Station X, [hls.js](https://github.com/video-dev/hls.js) for the fallback player.
+- Lampa app: [yumata/lampa](https://github.com/yumata/lampa)
+- Lampa source: [yumata/lampa-source](https://github.com/yumata/lampa-source)
+- Original Twitch TV inspiration: [fgl27/smarttwitchtv](https://github.com/fgl27/smarttwitchtv)

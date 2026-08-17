@@ -1,6 +1,6 @@
 {
-    "name": "Smart Twitch TV",
-    "version": "1.7.5",
-    "parameter": "content:https://wealth.github.io/msx/start.json",
-    "action": "link:https://wealth.github.io/tv/"
+	"name": "Lampa",
+	"version": "latest",
+	"parameter": "content:https://wealth.github.io/msx/start.json",
+	"action": "link:https://wealth.github.io"
 }
