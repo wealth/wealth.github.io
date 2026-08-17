@@ -43,13 +43,16 @@ Not affiliated with Twitch, Amazon, or Lampa’s authors.
 
 ## Install for MSX
 
-You need your own hosting or a local web server.
-
 1. Host this repo (GitHub Pages works; this user site is `https://wealth.github.io`).
-2. Open `msx/start.json` and set the host if you are not using `wealth.github.io`.
-3. Install **Media Station X**, then set the start parameter to that host (no `https://`).
+2. If the host is not `wealth.github.io`, change the `link:` URLs in `msx/start.json`.
+3. Install **Media Station X** → **Settings → Start Parameter → Setup**.
+4. Enable the HTTPS lock and enter `wealth.github.io` (no `https://`, no path).
 
-MSX loads `/msx/start.json` and opens Lampa via `link:`.
+MSX loads `/msx/start.json` and opens Lampa. Test in a browser:
+
+```
+https://msx.benzac.de/?start=content:https://wealth.github.io/msx/start.json
+```
 
 ## Docker
 
