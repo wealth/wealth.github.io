@@ -43,20 +43,20 @@ Not affiliated with Twitch, Amazon, or Lampa’s authors.
 
 ## Install for MSX
 
-This TV can load **HTTP** (same as [lampa.mx](http://lampa.mx)) but not GitHub Pages / jsDelivr **HTTPS** (minute-long timeout, then “check connection”). lampa.mx’s start file is:
+MSX setup (same as the old Smart Twitch TV app in this repo):
+
+1. **Settings → Start Parameter → Setup**
+2. **HTTPS lock ON**
+3. Enter `wealth.github.io`
+
+`msx/start.json` is the same shape that already worked here:
 
 ```json
-"parameter": "content:http://lampa.mx/msx/start.json",
-"action": "link:http://lampa.mx"
+"parameter": "content:https://wealth.github.io/msx/start.json",
+"action": "link:https://wealth.github.io/"
 ```
 
-GitHub Pages cannot speak HTTP, so on the TV use a LAN server the same way:
-
-```
-npx http-server . -p 8080 --cors -a 0.0.0.0
-```
-
-Then in MSX: **Settings → Start Parameter → Setup**, **HTTPS lock OFF**, enter `192.168.x.x:8080` (this Mac is `192.168.3.201`).
+lampa.mx uses `http://` because *their* host still serves HTTP. This fork does not require HTTP; GitHub Pages is HTTPS-only, which is what the old app used.
 
 ## Docker
 

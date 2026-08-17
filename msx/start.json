@@ -1,6 +1,6 @@
 {
 	"name": "Lampa",
 	"version": "latest",
-	"parameter": "content:http://{SERVER}/msx/start.json",
-	"action": "link:http://{SERVER}"
+	"parameter": "content:https://wealth.github.io/msx/start.json",
+	"action": "link:https://wealth.github.io/"
 }
