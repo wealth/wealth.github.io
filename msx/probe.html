@@ -16,15 +16,14 @@
 </style>
 </head>
 <body>
-  <!-- Deliberately does NOT redirect, pushState, or load any script.
-       If MSX shows this page on the TV, its webview CAN open a small
-       github.io page. If MSX shows "status 0" instead, it cannot reach
-       github.io at all and the whole app must move off github.io. -->
+  <!-- No script, no redirect. This exact file is reachable from both
+       github.io (Fastly) and Cloudflare CDNs. Which tile opened it tells
+       us which edge the TV's MSX webview can reach. -->
   <div class="wrap">
     <div>
       <h1>PROBE OK</h1>
-      <p>MSX opened a github.io page in its webview.<br>
-         Small static pages work &mdash; the problem is Lampa's size / boot redirect.</p>
+      <p>MSX opened this page in its webview.<br>
+         Note which tile you pressed &mdash; github.io or Cloudflare.</p>
       <small>msx/probe.html</small>
     </div>
   </div>

@@ -1,19 +1,29 @@
 {
 	"type": "pages",
-	"headline": "jsDelivr OK — now test github.io",
+	"headline": "Press BOTH tiles — which one opens?",
 	"cache": false,
 	"pages": [
 		{
 			"items": [
 				{
-					"id": "go",
+					"id": "gh",
 					"type": "default",
-					"layout": "2,1,8,4",
-					"color": "msx-blue",
-					"icon": "open-in-new",
-					"headline": "Open github.io probe",
-					"text": "This screen loaded from jsDelivr.{br}Press OK to open a tiny github.io page.{br}If OK times out, MSX cannot open github.io.",
+					"layout": "1,1,5,4",
+					"color": "msx-red",
+					"icon": "cloud-off",
+					"headline": "A) via github.io",
+					"text": "Fastly / github.io.{br}Press OK.{br}(This is the one that times out.)",
 					"action": "link:https://wealth.github.io/msx/probe.html"
+				},
+				{
+					"id": "cf",
+					"type": "default",
+					"layout": "6,1,5,4",
+					"color": "msx-green",
+					"icon": "cloud-done",
+					"headline": "B) via Cloudflare",
+					"text": "Cloudflare edge (githack).{br}Press OK.{br}If THIS opens, the fix is to host on Cloudflare.",
+					"action": "link:https://raw.githack.com/wealth/wealth.github.io/main/msx/probe.html"
 				}
 			]
 		}
