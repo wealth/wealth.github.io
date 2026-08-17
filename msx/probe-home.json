@@ -1,19 +1,18 @@
 {
 	"type": "pages",
-	"headline": "MSX Probe",
+	"headline": "jsDelivr OK — now test github.io",
 	"cache": false,
-	"action": "link:https://wealth.github.io/msx/probe.html",
 	"pages": [
 		{
 			"items": [
 				{
-					"id": "probe",
+					"id": "go",
 					"type": "default",
 					"layout": "2,1,8,4",
-					"color": "msx-green",
-					"icon": "check-circle",
-					"headline": "Open probe page",
-					"text": "Loads a tiny github.io page (no redirect).{br}Press OK if it does not open by itself.",
+					"color": "msx-blue",
+					"icon": "open-in-new",
+					"headline": "Open github.io probe",
+					"text": "This screen loaded from jsDelivr.{br}Press OK to open a tiny github.io page.{br}If OK times out, MSX cannot open github.io.",
 					"action": "link:https://wealth.github.io/msx/probe.html"
 				}
 			]
