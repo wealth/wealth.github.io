@@ -6,7 +6,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.0.1";
+    var VERSION = "1.0.2";
     var ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M2.15 0L.69 3.87v16.26h5.54V24h3.11l2.94-3.87h4.5L23.31 12V0H2.15zm19.46 11.08l-3.46 3.61h-5.54l-2.94 3.87v-3.87H4.73V1.73h16.88v9.35z"/><path d="M18.15 4.76h-1.73v5.2h1.73v-5.2zm-4.85 0H11.57v5.2h1.73v-5.2z"/></svg>';
 
     function t(key) {
@@ -1063,6 +1063,7 @@
             twitch_retry: { ru: "Повторить", en: "Try again", uk: "Повторити" },
             twitch_settings: { ru: "Twitch", en: "Twitch", uk: "Twitch" },
             twitch_set_chat: { ru: "Чат поверх видео", en: "Chat overlay", uk: "Чат поверх відео" },
+            twitch_chat_toggle: { ru: "Чат", en: "Chat", uk: "Чат" },
             twitch_set_chatpos: { ru: "Позиция чата", en: "Chat position", uk: "Позиція чату" },
             twitch_set_chatheight: { ru: "Высота чата", en: "Chat height", uk: "Висота чату" },
             twitch_set_chatwidth: { ru: "Ширина чата", en: "Chat width", uk: "Ширина чату" },
@@ -1124,6 +1125,30 @@
         });
     }
 
+    /*
+     * Lampa's menu Editor (app.min.js) keeps the sidebar order in Storage
+     * 'menu_sort' and re-applies it ~500ms after the menu changes: any label it
+     * has not seen before is pushed onto the END of the saved list, then every
+     * item is re-appended in that saved order. So on any profile that already
+     * has an order saved — anyone who has used the app before — a DOM prepend
+     * on its own is silently undone and we land back at the bottom. Put
+     * ourselves in the saved list too, which is what actually decides the order.
+     *
+     * afterLabel: place directly below that entry, or at the top when null.
+     */
+    function pinMenuOrder(label, afterLabel) {
+        try {
+            var sort = Lampa.Storage.get("menu_sort", "[]");
+            /* Nothing saved yet — the Editor will record the DOM order we set. */
+            if (!sort || !sort.length) { return; }
+            var at = sort.indexOf(label);
+            if (at >= 0) { sort.splice(at, 1); }
+            var after = afterLabel ? sort.indexOf(afterLabel) : -1;
+            sort.splice(after >= 0 ? after + 1 : 0, 0, label);
+            Lampa.Storage.set("menu_sort", sort);
+        } catch (e) { }
+    }
+
     function addMenu() {
         function open() {
             openTwitch({ title: t("twitch") });
@@ -1136,10 +1161,68 @@
          */
         var button = $('<li class="menu__item selector" data-action="twitch"><div class="menu__ico">' + ICON + '</div><div class="menu__text">' + t("twitch") + "</div></li>");
         button.on("hover:enter", open);
-        $(".menu .menu__list").eq(0).prepend(button);
+
+        function place() {
+            $(".menu .menu__list").eq(0).prepend(button);
+            pinMenuOrder(t("twitch"), null);
+        }
+        place();
+        /* Re-assert after Lampa's Editor observer (500ms debounce) has run. */
+        setTimeout(place, 1500);
     }
 
     var statsTimer = null;
+
+    /* ------------------------------------------------------------------ */
+    /* Chat toggle button in the player panel                             */
+    /* ------------------------------------------------------------------ */
+
+    var CHAT_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4v4l5-4h7a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-9 11H7v-2h4v2zm6-4H7V7h10v2z"/></svg>';
+    var chatButton = null;
+
+    /*
+     * Lampa's player panel has no plugin API for extra buttons, so we inject
+     * one with the same markup as the built-ins (.button.selector inside a
+     * .player-panel__box-buttons group). That gets us the stock focus styling
+     * and, because Lampa collects .selector elements when the panel is toggled,
+     * D-pad reachability for free. The panel is built with the player, so poll
+     * briefly for it rather than assuming it exists at "start".
+     */
+    function addChatButton() {
+        removeChatButton();
+        if (typeof StvChat === "undefined") { return; }
+
+        var tries = 0;
+        (function attach() {
+            var box = $(".player-panel__right .player-panel__box-buttons").last();
+            if (!box.length) {
+                if (tries++ < 40) { setTimeout(attach, 150); }
+                return;
+            }
+            chatButton = $('<div class="button selector twitch-chat-button">' + CHAT_ICON +
+                '<div class="tooltip">' + esc(t("twitch_chat_toggle")) + "</div></div>");
+
+            function sync() {
+                /* Dim the icon while chat is hidden so the state is readable. */
+                if (StvChat.isEnabled()) { chatButton.removeClass("twitch-chat-button--off"); }
+                else { chatButton.addClass("twitch-chat-button--off"); }
+            }
+
+            chatButton.on("hover:enter", function () {
+                StvChat.toggle();
+                sync();
+            });
+            sync();
+            box.prepend(chatButton);
+        })();
+    }
+
+    function removeChatButton() {
+        if (chatButton) {
+            chatButton.remove();
+            chatButton = null;
+        }
+    }
 
     function hookPlayer() {
         if (!Lampa.Player || !Lampa.Player.listener) { return; }
@@ -1148,6 +1231,7 @@
             if (typeof StvChat !== "undefined") {
                 StvChat.init(data.twitch_channel, data.twitch_cid);
             }
+            addChatButton();
             if (statsTimer) { clearInterval(statsTimer); }
             function tick() {
                 Twitch.streamStats(data.twitch_channel, function (err, s) {
@@ -1160,6 +1244,7 @@
         });
         Lampa.Player.listener.follow("destroy", function () {
             if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+            removeChatButton();
             if (typeof StvChat !== "undefined") {
                 try { StvChat.dispose(); } catch (e) { }
             }

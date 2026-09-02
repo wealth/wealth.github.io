@@ -249,3 +249,13 @@
 .stv-msgs > .stv-msg:first-child { border-top: none; }
 .stv-nick { font-weight: bold; }
 .stv-emote { height: 1.35em; vertical-align: middle; margin: -0.15em 0; }
+
+/* Chat toggle injected into the player panel. Matches the built-in
+   .player-panel__* buttons; only the off-state dimming is ours. */
+.twitch-chat-button svg {
+    width: 2.2em;
+    height: 2.2em;
+}
+.twitch-chat-button--off svg {
+    opacity: 0.4;
+}

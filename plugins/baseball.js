@@ -286,13 +286,42 @@
         Lampa.Activity.push({ url: "", title: t("baseball"), component: "baseball", page: 1 });
     }
 
+    /*
+     * Lampa's menu Editor keeps the sidebar order in Storage 'menu_sort' and
+     * re-applies it ~500ms after the menu changes, pushing labels it has not
+     * seen onto the END. A DOM insert alone is therefore undone on any profile
+     * with a saved order, so write ourselves into that list as well — directly
+     * below Twitch, matching where we put the element.
+     */
+    function pinMenuOrder(label, afterLabel) {
+        try {
+            var sort = Lampa.Storage.get("menu_sort", "[]");
+            if (!sort || !sort.length) { return; }
+            var at = sort.indexOf(label);
+            if (at >= 0) { sort.splice(at, 1); }
+            var after = afterLabel ? sort.indexOf(afterLabel) : -1;
+            sort.splice(after >= 0 ? after + 1 : 0, 0, label);
+            Lampa.Storage.set("menu_sort", sort);
+        } catch (e) { }
+    }
+
     function addMenu() {
         var button = $('<li class="menu__item selector" data-action="baseball"><div class="menu__ico">' + ICON + '</div><div class="menu__text">' + t("baseball") + "</div></li>");
         button.on("hover:enter", openBaseball);
-        /* Sit directly under Twitch when it is present, else lead the list. */
-        var twitch = $('.menu .menu__list').eq(0).find('[data-action="twitch"]');
-        if (twitch.length) { twitch.after(button); }
-        else { $(".menu .menu__list").eq(0).prepend(button); }
+
+        function place() {
+            var list = $(".menu .menu__list").eq(0);
+            /* Sit directly under Twitch when it is present, else lead the list. */
+            var twitch = list.find('[data-action="twitch"]');
+            if (twitch.length) { twitch.after(button); }
+            else { list.prepend(button); }
+            /* Anchor by the Twitch entry's own label so this works in any UI language. */
+            var label = twitch.length ? twitch.find(".menu__text").text().trim() : null;
+            pinMenuOrder(t("baseball"), label);
+        }
+        place();
+        /* Runs after the Twitch plugin's own re-assert (1500ms) so we stay below it. */
+        setTimeout(place, 1800);
     }
 
     function startPlugin() {
