@@ -351,10 +351,17 @@ var Twitch = (function () {
      * URL format (from streamlink-ttvlol): {host}/playlist/{channel}.m3u8 with
      * the query string percent-encoded into the path. Public proxies rotate/go
      * down and are region-dependent — always keep direct liveUrl() as a fallback.
+     *
+     * Liveness re-checked 2026-09-02: lb-eu was returning 502 on every request
+     * and lb-na 403 on /playlist/, so "eu" now points at the luminous host
+     * (verified serving playlists with ACAO:*) and the perfprod EU box moved to
+     * the secondary slot. A healthy proxy always answers /playlist/ with
+     * "Access-Control-Allow-Origin: *"; playLive() uses that to detect a dead
+     * one and fall back to direct usher.
      */
     var AD_PROXIES = {
-        eu: "https://lb-eu.cdn-perfprod.com",
-        eu2: "https://eu.luminous.dev",
+        eu: "https://eu.luminous.dev",
+        eu2: "https://lb-eu.cdn-perfprod.com",
         na: "https://lb-na.cdn-perfprod.com",
         as: "https://lb-as.cdn-perfprod.com"
     };

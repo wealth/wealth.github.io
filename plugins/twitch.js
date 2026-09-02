@@ -6,7 +6,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.0.0";
+    var VERSION = "1.0.1";
     var ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M2.15 0L.69 3.87v16.26h5.54V24h3.11l2.94-3.87h4.5L23.31 12V0H2.15zm19.46 11.08l-3.46 3.61h-5.54l-2.94 3.87v-3.87H4.73V1.73h16.88v9.35z"/><path d="M18.15 4.76h-1.73v5.2h1.73v-5.2zm-4.85 0H11.57v5.2h1.73v-5.2z"/></svg>';
 
     function t(key) {
@@ -134,6 +134,14 @@
         return { variants: variants, map: map };
     }
 
+    /* Applies the picked variant + the quality menu from a master playlist. */
+    function applyMaster(item, text, pick) {
+        var parsed = qualityMap(text);
+        var chosen = Twitch.pickVariant(parsed.variants, pick);
+        if (chosen) { item.url = chosen; }
+        if (parsed.variants.length > 1) { item.quality = parsed.map; }
+    }
+
     function playLive(stream) {
         if (!stream || !stream.broadcaster) { return; }
         var channel = stream.broadcaster.login;
@@ -148,28 +156,47 @@
             var adblock = String(Lampa.Storage.get("twitch_adblock", "off"));
             var pref = String(Lampa.Storage.get("twitch_quality", "auto"));
             var direct = Twitch.liveUrl(channel, token);
-            var url = adblock !== "off" ? Twitch.liveUrlProxy(channel, adblock) : direct;
+            var proxied = adblock !== "off";
             var item = {
                 title: title,
-                url: url,
+                url: proxied ? Twitch.liveUrlProxy(channel, adblock) : direct,
                 tv: true,
                 twitch_channel: channel,
                 twitch_cid: stream.broadcaster.id
             };
-            var needPick = pref !== "auto" || adblock !== "off";
-            if (!needPick) {
-                playReady(item);
+
+            /* Read the master playlist (if needed) and hand the result to the player. */
+            function finish(masterUrl, pick) {
+                if (!pick) { playReady(item); return; }
+                Twitch.fetchText(masterUrl, function (e2, text) {
+                    if (!e2 && text) { applyMaster(item, text, pick); }
+                    playReady(item);
+                });
+            }
+
+            if (!proxied) {
+                finish(direct, pref !== "auto" ? pref : null);
                 return;
             }
-            Twitch.fetchText(url, function (e2, text) {
+
+            /*
+             * Ad-block on: fetching the proxy's master playlist doubles as a
+             * liveness probe. A healthy proxy always answers with
+             * "Access-Control-Allow-Origin: *", so ANY failure here — HTTP
+             * error, timeout, or the header-less error page a dead proxy
+             * returns — means it cannot serve this stream. These public
+             * proxies rotate and go down without notice, so fall back to
+             * direct usher: playing with ads beats a black screen.
+             */
+            Twitch.fetchText(item.url, function (e2, text) {
                 if (!e2 && text) {
-                    var parsed = qualityMap(text);
-                    var pick = pref === "auto" && adblock !== "off" ? "source" : pref;
-                    var chosen = Twitch.pickVariant(parsed.variants, pick);
-                    if (chosen) { item.url = chosen; }
-                    if (parsed.variants.length > 1) { item.quality = parsed.map; }
+                    applyMaster(item, text, pref === "auto" ? "source" : pref);
+                    playReady(item);
+                    return;
                 }
-                playReady(item);
+                item.url = direct;
+                Lampa.Noty.show(t("twitch_adblock_down"));
+                finish(direct, pref !== "auto" ? pref : null);
             });
         });
     }
@@ -195,12 +222,7 @@
                 return;
             }
             Twitch.fetchText(url, function (e2, text) {
-                if (!e2 && text) {
-                    var parsed = qualityMap(text);
-                    var chosen = Twitch.pickVariant(parsed.variants, pref);
-                    if (chosen) { item.url = chosen; }
-                    if (parsed.variants.length > 1) { item.quality = parsed.map; }
-                }
+                if (!e2 && text) { applyMaster(item, text, pref); }
                 playReady(item);
             });
         });
@@ -1030,6 +1052,7 @@
             twitch_videos: { ru: "Недавние видео", en: "Recent videos", uk: "Недавні відео" },
             twitch_video: { ru: "Видео", en: "Video", uk: "Відео" },
             twitch_empty: { ru: "Ничего нет", en: "Nothing here right now.", uk: "Нічого немає" },
+            twitch_adblock_down: { ru: "Прокси блокировки рекламы недоступен — играем напрямую", en: "Ad-block proxy unavailable — playing direct", uk: "Проксі блокування реклами недоступний — граємо напряму" },
             twitch_login_hint: { ru: "Откройте twitch.tv/activate и введите код", en: "Open twitch.tv/activate and enter this code", uk: "Відкрийте twitch.tv/activate і введіть код" },
             twitch_login_wait: { ru: "Запрашиваем код…", en: "Requesting a code…", uk: "Запитуємо код…" },
             twitch_login_expired: { ru: "Код истёк. Попробуйте снова.", en: "The code expired. Try again.", uk: "Код сплив. Спробуйте знову." },
