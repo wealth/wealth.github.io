@@ -29,6 +29,7 @@
 
     <link rel="stylesheet" href="css/app.css?v=4.56">
     <link rel="stylesheet" href="plugins/twitch.css?v=1.0.0">
+    <link rel="stylesheet" href="plugins/baseball.css?v=1.0.0">
     <script>
         /* When this file is opened from jsDelivr (text/plain on desktop, sniffed as
            HTML on old TVs), keep relative script/css URLs on the CDN. */
@@ -129,9 +130,19 @@
             putScript('js/twitch.js?v=' + cache_version, function () {
                 putScript('js/auth.js?v=' + cache_version, function () {
                     putScript('js/chat.js?v=' + cache_version, function () {
-                        putScript('plugins/twitch.js?v=' + cache_version, function () {})
+                        putScript('plugins/twitch.js?v=' + cache_version, function () {
+                            loadBaseballPlugin()
+                        })
                     })
                 })
+            })
+        }
+
+        /* Baseball (SOOP / KBO). Loaded after Twitch so its menu entry can
+           position itself directly under the Twitch one. */
+        function loadBaseballPlugin() {
+            putScript('js/soop.js?v=' + cache_version, function () {
+                putScript('plugins/baseball.js?v=' + cache_version, function () {})
             })
         }
 

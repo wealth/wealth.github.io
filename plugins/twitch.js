@@ -1128,13 +1128,15 @@
         function open() {
             openTwitch({ title: t("twitch") });
         }
-        if (Lampa.Menu && Lampa.Menu.addButton) {
-            Lampa.Menu.addButton(ICON, t("twitch"), open);
-            return;
-        }
+        /*
+         * Built and inserted by hand rather than through Lampa.Menu.addButton:
+         * that helper is a thin wrapper around .menu__list:eq(0).append(), so it
+         * can only put us last. Twitch is the reason this build exists, so it
+         * goes first — above "Main". Runs on app:ready, so the list is present.
+         */
         var button = $('<li class="menu__item selector" data-action="twitch"><div class="menu__ico">' + ICON + '</div><div class="menu__text">' + t("twitch") + "</div></li>");
         button.on("hover:enter", open);
-        $(".menu .menu__list").eq(0).append(button);
+        $(".menu .menu__list").eq(0).prepend(button);
     }
 
     var statsTimer = null;
