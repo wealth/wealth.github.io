@@ -6,7 +6,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.0.2";
+    var VERSION = "1.0.3";
     var ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M2.15 0L.69 3.87v16.26h5.54V24h3.11l2.94-3.87h4.5L23.31 12V0H2.15zm19.46 11.08l-3.46 3.61h-5.54l-2.94 3.87v-3.87H4.73V1.73h16.88v9.35z"/><path d="M18.15 4.76h-1.73v5.2h1.73v-5.2zm-4.85 0H11.57v5.2h1.73v-5.2z"/></svg>';
 
     function t(key) {
@@ -1187,6 +1187,15 @@
      * and, because Lampa collects .selector elements when the panel is toggled,
      * D-pad reachability for free. The panel is built with the player, so poll
      * briefly for it rather than assuming it exists at "start".
+     *
+     * Anchor on the settings button: the panel holds TWO .player-panel__right
+     * blocks, a .player-panel__tv-visible one and a .player-panel__mobile-visible
+     * one, and only one of them is ever displayed. Picking the last
+     * ".player-panel__right .player-panel__box-buttons" landed us in the mobile
+     * block, which is display:none everywhere except a true mobile screen -- the
+     * button existed but was invisible and unreachable. Sitting next to Settings
+     * also gets us into the mobile "more" list, which is built by scraping
+     * ".player-panel__tv-visible .button" for tooltips.
      */
     function addChatButton() {
         removeChatButton();
@@ -1194,8 +1203,8 @@
 
         var tries = 0;
         (function attach() {
-            var box = $(".player-panel__right .player-panel__box-buttons").last();
-            if (!box.length) {
+            var settings = $(".player-panel__tv-visible .player-panel__settings");
+            if (!settings.length) {
                 if (tries++ < 40) { setTimeout(attach, 150); }
                 return;
             }
@@ -1213,7 +1222,7 @@
                 sync();
             });
             sync();
-            box.prepend(chatButton);
+            chatButton.insertBefore(settings);
         })();
     }
 

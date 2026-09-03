@@ -259,3 +259,12 @@
 .twitch-chat-button--off svg {
     opacity: 0.4;
 }
+
+/* A live stream has no end time. Lampa computes the info line's "Ends at" from
+   video.duration, which is Infinity on a live HLS source, so Date() comes out
+   invalid and the overlay reads "Ends at NaN:NaN". Upstream already hides the
+   timeline and the panel clock under .player.tv -- the flag both the Twitch live
+   and Baseball items set -- and only missed this one element. */
+.player.tv .player-info__time-end {
+    display: none;
+}
