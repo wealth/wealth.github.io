@@ -6,7 +6,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.0.3";
+    var VERSION = "1.0.4";
     var ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M2.15 0L.69 3.87v16.26h5.54V24h3.11l2.94-3.87h4.5L23.31 12V0H2.15zm19.46 11.08l-3.46 3.61h-5.54l-2.94 3.87v-3.87H4.73V1.73h16.88v9.35z"/><path d="M18.15 4.76h-1.73v5.2h1.73v-5.2zm-4.85 0H11.57v5.2h1.73v-5.2z"/></svg>';
 
     function t(key) {
@@ -1064,6 +1064,11 @@
             twitch_settings: { ru: "Twitch", en: "Twitch", uk: "Twitch" },
             twitch_set_chat: { ru: "Чат поверх видео", en: "Chat overlay", uk: "Чат поверх відео" },
             twitch_chat_toggle: { ru: "Чат", en: "Chat", uk: "Чат" },
+            twitch_set_chat_hint: {
+                ru: "Во время трансляции чат переключается кнопкой в панели плеера или зелёной / жёлтой кнопкой пульта",
+                en: "During a stream, toggle chat with the button in the player panel or the green / yellow remote button",
+                uk: "Під час трансляції чат перемикається кнопкою в панелі плеєра або зеленою / жовтою кнопкою пульта"
+            },
             twitch_set_chatpos: { ru: "Позиция чата", en: "Chat position", uk: "Позиція чату" },
             twitch_set_chatheight: { ru: "Высота чата", en: "Chat height", uk: "Висота чату" },
             twitch_set_chatwidth: { ru: "Ширина чата", en: "Chat width", uk: "Ширина чату" },
@@ -1091,7 +1096,7 @@
         Lampa.SettingsApi.addParam({
             component: "twitch",
             param: { name: "twitch_chat", type: "select", values: { on: t("settings_param_yes") || "On", off: t("settings_param_no") || "Off" }, default: "on" },
-            field: { name: t("twitch_set_chat") }
+            field: { name: t("twitch_set_chat"), description: t("twitch_set_chat_hint") }
         });
         Lampa.SettingsApi.addParam({
             component: "twitch",
@@ -1174,7 +1179,7 @@
     var statsTimer = null;
 
     /* ------------------------------------------------------------------ */
-    /* Chat toggle button in the player panel                             */
+    /* Chat toggle: player-panel button + colour keys on the remote       */
     /* ------------------------------------------------------------------ */
 
     var CHAT_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4v4l5-4h7a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-9 11H7v-2h4v2zm6-4H7V7h10v2z"/></svg>';
@@ -1210,18 +1215,8 @@
             }
             chatButton = $('<div class="button selector twitch-chat-button">' + CHAT_ICON +
                 '<div class="tooltip">' + esc(t("twitch_chat_toggle")) + "</div></div>");
-
-            function sync() {
-                /* Dim the icon while chat is hidden so the state is readable. */
-                if (StvChat.isEnabled()) { chatButton.removeClass("twitch-chat-button--off"); }
-                else { chatButton.addClass("twitch-chat-button--off"); }
-            }
-
-            chatButton.on("hover:enter", function () {
-                StvChat.toggle();
-                sync();
-            });
-            sync();
+            chatButton.on("hover:enter", toggleChat);
+            syncChatButton();
             chatButton.insertBefore(settings);
         })();
     }
@@ -1233,6 +1228,50 @@
         }
     }
 
+    /* Dim the icon while chat is hidden so the state is readable. */
+    function syncChatButton() {
+        if (!chatButton || typeof StvChat === "undefined") { return; }
+        chatButton.toggleClass("twitch-chat-button--off", !StvChat.isEnabled());
+    }
+
+    function toggleChat() {
+        if (typeof StvChat === "undefined") { return; }
+        StvChat.toggle();
+        syncChatButton();
+    }
+
+    /*
+     * Colour keys on a TV remote: red 403, green 404, yellow 405, blue 406.
+     * Reaching the panel button costs several D-pad presses, so put the same
+     * toggle on green and yellow -- whichever one the remote actually has.
+     *
+     * Bound only for the duration of a Twitch stream. Lampa's own webOS handler
+     * maps all four colours to subtitle tweaks, but those bail out unless the
+     * platform set video.mediaId, which never happens on our HLS <video>, and a
+     * live stream carries no subtitles anyway. Keypad.listener fires app-wide,
+     * hence the tight bind/unbind around playback rather than a permanent hook.
+     */
+    var CHAT_KEYS = [404, 405];
+    var chatKeyHandler = null;
+
+    function bindChatKeys() {
+        unbindChatKeys();
+        if (!Lampa.Keypad || !Lampa.Keypad.listener) { return; }
+        chatKeyHandler = function (e) {
+            if (!e || CHAT_KEYS.indexOf(e.code) === -1) { return; }
+            if (e.event && e.event.preventDefault) { e.event.preventDefault(); }
+            toggleChat();
+        };
+        Lampa.Keypad.listener.follow("keydown", chatKeyHandler);
+    }
+
+    function unbindChatKeys() {
+        if (chatKeyHandler && Lampa.Keypad && Lampa.Keypad.listener) {
+            Lampa.Keypad.listener.remove("keydown", chatKeyHandler);
+        }
+        chatKeyHandler = null;
+    }
+
     function hookPlayer() {
         if (!Lampa.Player || !Lampa.Player.listener) { return; }
         Lampa.Player.listener.follow("start", function (data) {
@@ -1241,6 +1280,7 @@
                 StvChat.init(data.twitch_channel, data.twitch_cid);
             }
             addChatButton();
+            bindChatKeys();
             if (statsTimer) { clearInterval(statsTimer); }
             function tick() {
                 Twitch.streamStats(data.twitch_channel, function (err, s) {
@@ -1253,6 +1293,7 @@
         });
         Lampa.Player.listener.follow("destroy", function () {
             if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+            unbindChatKeys();
             removeChatButton();
             if (typeof StvChat !== "undefined") {
                 try { StvChat.dispose(); } catch (e) { }
