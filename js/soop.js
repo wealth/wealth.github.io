@@ -20,6 +20,10 @@
  * The playlist and its .TS segments are NOT proxied and carry no CORS headers —
  * that is fine, because a native <video> loads media without a CORS check (the
  * same reason Twitch's usher URLs play on the TV but not via XHR on desktop).
+ *
+ * SOOP can only ever answer "is this channel live right now", so the KBO fixture
+ * list comes from a second upstream (Naver) through the same Worker — see
+ * kboSchedule() at the bottom of this file.
  */
 var SOOP = (function () {
     "use strict";
@@ -204,8 +208,100 @@ var SOOP = (function () {
         });
     }
 
+    /* ------------------------------------------------------------------ */
+    /* KBO schedule                                                       */
+    /* ------------------------------------------------------------------ */
+
+    /*
+     * The fixture list, so the tab can say when the next game is instead of
+     * just "nothing live" on a rest day. It does not come from SOOP: SOOP has
+     * no schedule endpoint. Naver's sports API is the one free KBO fixture feed
+     * that answers with clean JSON, but it 403s any request carrying an Origin
+     * header, so it goes through our Worker as well (route /schedule).
+     */
+
+    /* Naver reports Korean short names; SOOP's stream titles are English, so
+       use English here too and the two halves of the tab read the same. */
+    var KBO_TEAMS = {
+        HH: "Hanwha Eagles",
+        HT: "KIA Tigers",
+        KT: "KT Wiz",
+        LG: "LG Twins",
+        LT: "Lotte Giants",
+        NC: "NC Dinos",
+        OB: "Doosan Bears",
+        SK: "SSG Landers",
+        SS: "Samsung Lions",
+        WO: "Kiwoom Heroes"
+    };
+
+    function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+    function ymd(date) {
+        return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
+    }
+
+    /*
+     * gameDateTime is "2026-09-03T18:30:00" — a Korean wall clock with no
+     * offset. ES5 and ES6 disagree on how to parse that shape (UTC vs local),
+     * and old TV browsers are exactly where that bites, so build the instant by
+     * hand. KST is UTC+9 year round; Korea has no DST.
+     */
+    function kstToDate(text) {
+        var m = String(text || "").match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (!m) { return null; }
+        return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 9, +m[5], +(m[6] || 0)));
+    }
+
+    function mapGame(g) {
+        var start = kstToDate(g.gameDateTime);
+        if (!start) { return null; }
+        var state = "upcoming";
+        if (g.cancel || g.suspended) { state = "cancelled"; }
+        else if (g.statusCode === "RESULT") { state = "final"; }
+        else if (g.statusCode !== "BEFORE") { state = "live"; }
+        return {
+            id: g.gameId,
+            start: start,
+            state: state,
+            away: KBO_TEAMS[g.awayTeamCode] || g.awayTeamName || g.awayTeamCode,
+            home: KBO_TEAMS[g.homeTeamCode] || g.homeTeamName || g.homeTeamCode,
+            awayLogo: g.awayTeamEmblemUrl || "",
+            homeLogo: g.homeTeamEmblemUrl || "",
+            awayScore: g.awayTeamScore || 0,
+            homeScore: g.homeTeamScore || 0,
+            /* Only meaningful once the game has started. */
+            scored: state === "final" || state === "live"
+        };
+    }
+
+    /*
+     * Games from yesterday through `days` days out, oldest first. The window is
+     * padded a day on each side because we ask in KST dates but the caller
+     * buckets by the viewer's local date, and those disagree by up to a day.
+     */
+    function kboSchedule(days, callback) {
+        var now = new Date();
+        var from = new Date(now.getTime() - 86400000);
+        var to = new Date(now.getTime() + (days + 1) * 86400000);
+
+        getJSON(PROXY + "/schedule?from=" + ymd(from) + "&to=" + ymd(to), function (err, data) {
+            if (err) { callback(err, null); return; }
+            var list = data && data.result ? data.result.games : null;
+            if (!list) { callback("No schedule in response", null); return; }
+            var games = [];
+            for (var i = 0; i < list.length; i++) {
+                var game = mapGame(list[i]);
+                if (game) { games.push(game); }
+            }
+            games.sort(function (a, b) { return a.start - b.start; });
+            callback(null, games);
+        });
+    }
+
     return {
         LEAGUES: LEAGUES,
+        kboSchedule: kboSchedule,
         channel: channel,
         leagueGames: leagueGames,
         allGames: allGames,

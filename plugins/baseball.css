@@ -53,3 +53,67 @@
     font-size: 0.95em;
     opacity: 0.65;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Schedule cards — the fixture lines under the live one                     */
+/* ------------------------------------------------------------------------ */
+
+.baseball-sched .card__view {
+    background: rgba(255, 255, 255, 0.06);
+}
+.baseball-sched__teams {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.baseball-sched__logo {
+    width: 3.6em;
+    height: 3.6em;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+/* Two team names on one card wrap often, so pin the title to a two-line box:
+   otherwise a long pairing pushes that card's time out of step with the row. */
+.baseball-sched .card__title {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    height: 2.4em;
+}
+/* Reserved even when empty (an upcoming game shows its time in the middle of
+   the card instead), so a day that mixes played and upcoming games stays even. */
+.baseball-sched .baseball-card__meta {
+    min-height: 1.2em;
+}
+.baseball-sched__score {
+    min-width: 4em;
+    text-align: center;
+    font-size: 1.1em;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Corner badge. Same metrics as the LIVE flag on a live card, which keeps the
+   two kinds of card reading as one set. */
+.baseball-card__tag {
+    position: absolute;
+    top: 0.4em;
+    left: 0.4em;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.12em 0.45em;
+    border-radius: 0.2em;
+    color: #fff;
+    z-index: 2;
+}
+.baseball-card__tag--live {
+    background: #e91916;
+}
+.baseball-card__tag--muted {
+    background: rgba(255, 255, 255, 0.2);
+}

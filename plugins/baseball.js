@@ -7,11 +7,19 @@
  * games free worldwide (SOOP holds the global rights through 2026). The layout
  * is one horizontal line per league, so adding a league is a matter of adding
  * it to SOOP.LEAGUES — nothing here needs to change.
+ *
+ * Below the live line comes the fixture list, one line per day, so the tab still
+ * answers "when is the next game" on a rest day. All times are rendered in the
+ * viewer's own timezone: KBO's 18:30 first pitch is Korean wall clock, which is
+ * a different hour — sometimes a different day — everywhere else.
  */
 (function () {
     "use strict";
 
-    var VERSION = "1.0.0";
+    var VERSION = "1.1.0";
+
+    /* Days of fixtures to show, today included. */
+    var SCHEDULE_DAYS = 7;
     var ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9.2"/><path d="M5.2 5.4c2.6 2 4.2 4.9 4.5 8.1.2 2.3-.3 4.1-.9 5.6"/><path d="M18.8 5.4c-2.6 2-4.2 4.9-4.5 8.1-.2 2.3.3 4.1.9 5.6"/></svg>';
 
     function t(key) {
@@ -67,6 +75,87 @@
         img.attr("src", SOOP.thumb(game.bno));
 
         html.on("hover:enter", function () { playGame(game, league); });
+        return html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Schedule cards                                                     */
+    /* ------------------------------------------------------------------ */
+
+    function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+    /* Local calendar day, as a string that sorts and compares by value. */
+    function dayKey(date) {
+        return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
+    }
+
+    /* "Today" / "Tomorrow" / "Fri, 5 Sep", in the UI language. */
+    function dayTitle(date) {
+        var now = new Date();
+        var from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        var to = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        var diff = Math.round((to.getTime() - from.getTime()) / 86400000);
+        if (diff === 0) { return t("baseball_today"); }
+        if (diff === 1) { return t("baseball_tomorrow"); }
+        var parsed = Lampa.Utils.parseTime(date);
+        return parsed.week + ", " + parsed["short"];
+    }
+
+    function localTime(date) {
+        return Lampa.Utils.parseTime(date).time;
+    }
+
+    function leagueTitle(league) {
+        return (league.country ? league.country + " " : "") + league.name;
+    }
+
+    /* Emblems are plain images off Naver's CDN; hide one that fails rather than
+       removing it, so the two sides of the card stay balanced. */
+    function setLogo(img, url) {
+        if (!url) { img.css("visibility", "hidden"); return; }
+        img.on("error", function () { img.css("visibility", "hidden"); });
+        img.attr("src", url);
+    }
+
+    function scheduleCard(game) {
+        var html = $('<div class="card selector layer--visible baseball-card baseball-sched">' +
+            '<div class="card__view">' +
+                '<div class="baseball-sched__teams">' +
+                    '<img class="baseball-sched__logo" src="" alt="">' +
+                    '<div class="baseball-sched__score"></div>' +
+                    '<img class="baseball-sched__logo" src="" alt="">' +
+                '</div>' +
+            '</div>' +
+            '<div class="card__title"></div>' +
+            '<div class="baseball-card__meta"></div>' +
+        '</div>');
+
+        var logos = html.find(".baseball-sched__logo");
+        setLogo(logos.eq(0), game.awayLogo);
+        setLogo(logos.eq(1), game.homeLogo);
+
+        /* The middle of the card carries whichever number matters: the score
+           once there is one, otherwise the start time, which is the whole
+           reason to look at a fixture list. */
+        var score = game.awayScore + " : " + game.homeScore;
+        html.find(".baseball-sched__score").text(game.scored ? score : localTime(game.start));
+        html.find(".card__title").text(game.away + " — " + game.home);
+        html.find(".baseball-card__meta").text(game.scored ? localTime(game.start) : "");
+
+        var tag = null;
+        if (game.state === "live") { tag = { text: "LIVE", cls: "baseball-card__tag--live" }; }
+        else if (game.state === "final") { tag = { text: t("baseball_final"), cls: "baseball-card__tag--muted" }; }
+        else if (game.state === "cancelled") { tag = { text: t("baseball_cancelled"), cls: "baseball-card__tag--muted" }; }
+        if (tag) {
+            html.find(".card__view").append($('<div class="baseball-card__tag"></div>').addClass(tag.cls).text(tag.text));
+        }
+
+        /* Nothing to open for a fixture, so acknowledge the press with the one
+           thing the card had to abbreviate: the full day, time and score. */
+        html.on("hover:enter", function () {
+            Lampa.Noty.show(game.away + " — " + game.home + " · " + dayTitle(game.start) +
+                " " + localTime(game.start) + (game.scored ? " · " + score : ""));
+        });
         return html;
     }
 
@@ -165,39 +254,94 @@
             items.push(item);
         };
 
+        /* Live state and the fixture list are independent upstreams behind the
+           same Worker, so fetch both at once and let either one fail alone. */
         this.load = function () {
             var self = this;
-            SOOP.allGames(function (err, groups) {
-                if (err) {
-                    self.activity.loader(false);
-                    /* Almost always the Worker: the SOOP API is origin-locked,
-                       so without the proxy every call fails at the browser. */
-                    self.empty(t("baseball_no_proxy"));
-                    return;
-                }
-                var any = false;
-                for (var i = 0; i < groups.length; i++) {
-                    var g = groups[i];
-                    var title = (g.league.country ? g.league.country + " " : "") + g.league.name;
-                    if (g.games.length) {
-                        any = true;
-                        var cards = [];
-                        for (var k = 0; k < g.games.length; k++) {
-                            cards.push(gameCard(g.games[k], g.league));
-                        }
-                        self.appendLine({ title: title, cards: cards });
-                    } else {
-                        self.appendLine({ title: title, cards: [emptyCard(t("baseball_none_live"))] });
+            var pending = 2;
+            var live = { err: null, groups: null };
+            var sched = { err: null, games: null };
+
+            function done() {
+                if (--pending > 0) { return; }
+                self.build(live, sched);
+            }
+            SOOP.allGames(function (err, groups) { live.err = err; live.groups = groups; done(); });
+            SOOP.kboSchedule(SCHEDULE_DAYS, function (err, games) { sched.err = err; sched.games = games; done(); });
+        };
+
+        this.build = function (live, sched) {
+            /* Neither half answered: that is the Worker itself, not one feed.
+               The SOOP API is origin-locked, so without the proxy every call
+               fails at the browser. */
+            if (live.err && sched.err) {
+                this.empty(t("baseball_no_proxy"));
+                return;
+            }
+
+            if (live.err) {
+                this.appendLine({
+                    title: leagueTitle(SOOP.LEAGUES[0]) + " · " + t("baseball_live_now"),
+                    cards: [emptyCard(t("baseball_no_proxy"))]
+                });
+            } else {
+                for (var i = 0; i < live.groups.length; i++) {
+                    var g = live.groups[i];
+                    var cards = [];
+                    for (var k = 0; k < g.games.length; k++) {
+                        cards.push(gameCard(g.games[k], g.league));
                     }
+                    this.appendLine({
+                        title: leagueTitle(g.league) + " · " + t("baseball_live_now"),
+                        cards: cards.length ? cards : [emptyCard(t("baseball_none_live"))]
+                    });
                 }
-                self.activity.loader(false);
-                if (!any) { self.activity.toggle(); }
-                else { self.activity.toggle(); }
-            });
+            }
+
+            if (sched.err) {
+                /* A Worker deployed before /schedule existed answers 404 — say
+                   that rather than blaming the network. */
+                var msg = String(sched.err).indexOf("404") >= 0 ? t("baseball_schedule_worker") : t("baseball_no_schedule");
+                this.appendLine({ title: t("baseball_schedule"), cards: [emptyCard(msg)] });
+            } else if (!sched.games.length) {
+                this.appendLine({ title: t("baseball_schedule"), cards: [emptyCard(t("baseball_no_games"))] });
+            } else {
+                this.appendSchedule(sched.games);
+            }
+
+            this.activity.loader(false);
+            this.activity.toggle();
+        };
+
+        /* One line per calendar day, today first. The window from the API is
+           padded either side of the local one, so drop anything already past. */
+        this.appendSchedule = function (games) {
+            var today = dayKey(new Date());
+            var order = [];
+            var byDay = {};
+
+            for (var i = 0; i < games.length; i++) {
+                var key = dayKey(games[i].start);
+                if (key < today) { continue; }
+                if (!byDay[key]) { byDay[key] = []; order.push(key); }
+                byDay[key].push(games[i]);
+            }
+
+            for (var d = 0; d < order.length && d < SCHEDULE_DAYS; d++) {
+                var list = byDay[order[d]];
+                var cards = [];
+                for (var k = 0; k < list.length; k++) { cards.push(scheduleCard(list[k])); }
+                this.appendLine({ title: dayTitle(list[0].start), cards: cards });
+            }
         };
 
         this.empty = function (text) {
-            var em = Lampa.Template.get("empty", { desc: text || t("baseball_none_live") });
+            /* Lampa's empty template fills {title} and {descr} -- passing "desc"
+               left the literal "{descr}" on screen. */
+            var em = Lampa.Template.get("empty", {
+                title: t("baseball"),
+                descr: text || t("baseball_none_live")
+            });
             html.append(em);
             this.start = function () {
                 Lampa.Controller.add("content", {
@@ -274,6 +418,19 @@
                 uk: "Трансляція недоступна"
             },
             baseball_subtitles: { ru: "субтитры", en: "subtitles", uk: "субтитри" },
+            baseball_live_now: { ru: "Сейчас в эфире", en: "Live now", uk: "Зараз в ефірі" },
+            baseball_schedule: { ru: "Расписание", en: "Schedule", uk: "Розклад" },
+            baseball_today: { ru: "Сегодня", en: "Today", uk: "Сьогодні" },
+            baseball_tomorrow: { ru: "Завтра", en: "Tomorrow", uk: "Завтра" },
+            baseball_final: { ru: "Завершён", en: "Final", uk: "Завершено" },
+            baseball_cancelled: { ru: "Отменён", en: "Cancelled", uk: "Скасовано" },
+            baseball_no_games: { ru: "Игр не запланировано", en: "No games scheduled", uk: "Ігор не заплановано" },
+            baseball_no_schedule: { ru: "Расписание недоступно", en: "Schedule unavailable", uk: "Розклад недоступний" },
+            baseball_schedule_worker: {
+                ru: "Расписание требует обновлённого worker/soop-proxy.js",
+                en: "Schedule needs the updated worker/soop-proxy.js",
+                uk: "Розклад потребує оновленого worker/soop-proxy.js"
+            },
             baseball_no_proxy: {
                 ru: "Нет связи с SOOP. Проверьте, что worker/soop-proxy.js развёрнут.",
                 en: "Can't reach SOOP. Check that worker/soop-proxy.js is deployed.",
