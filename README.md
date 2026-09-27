@@ -24,7 +24,7 @@ Open **Twitch** in the Lampa sidebar.
 - **Favorites** stored on the device
 - **Channel pages** with recent VODs
 - **Optional Twitch login** (device code at [twitch.tv/activate](https://www.twitch.tv/activate)) for **Following** and **Recommended**
-- **Chat overlay** on live playback (Twitch / 7TV / BTTV emotes)
+- **Chat overlay** on live playback (Twitch / 7TV / BTTV / FFZ emotes)
 - Settings under **Settings → Twitch**: chat layout, quality, regional ad-block playlist proxies
 
 Long-press a live card to open the channel page. Playback uses Lampa’s player.

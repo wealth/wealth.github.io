@@ -249,6 +249,16 @@
 .stv-msgs > .stv-msg:first-child { border-top: none; }
 .stv-nick { font-weight: bold; }
 .stv-emote { height: 1.35em; vertical-align: middle; margin: -0.15em 0; }
+/* 7TV zero-width emotes: overlays centred on the emote before them */
+.stv-stack { position: relative; display: inline-block; vertical-align: middle; margin: -0.15em 0; }
+.stv-stack > .stv-emote { display: block; margin: 0; }
+.stv-stack > .stv-zw {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    -webkit-transform: translateX(-50%);
+    transform: translateX(-50%);
+}
 
 /* Chat toggle injected into the player panel. Matches the built-in
    .player-panel__* buttons; only the off-state dimming is ours. */

@@ -1,6 +1,6 @@
 /*
  * Twitch chat overlay for the Smart Twitch TV player (MSX).
- * Anonymous IRC over WebSocket + Twitch/BTTV/7TV emotes.
+ * Anonymous IRC over WebSocket + Twitch/BTTV/FFZ/7TV emotes.
  * ES5 only: must run on old TV browsers (webOS 3+).
  */
 var StvChat = (function () {
@@ -35,7 +35,11 @@ var StvChat = (function () {
     var reconnectTimer = null;
     var queue = [];
     var flushTimer = null;
-    var emoteMap = {};
+    /* Channel emotes shadow global ones with the same name, as in Twitch web */
+    var channelEmotes = {};
+    var globalEmotes = {};
+    var emotesLoaded = false;
+    var emoteGen = 0;
 
     /* ------------------------------------------------------------------ */
     /* Settings (shared with the app via localStorage)                    */
@@ -131,9 +135,45 @@ var StvChat = (function () {
         var node = document.createElement("div");
         node.className = "stv-msg";
         node.innerHTML = html;
+        watchStacks(node);
         msgsEl.appendChild(node);
         while (msgsEl.childNodes.length > MAX_MESSAGES) {
             msgsEl.removeChild(msgsEl.firstChild);
+        }
+    }
+
+    /*
+     * An overlay wider than its base (a pointing hand, a banner) would spill
+     * over the nick or the next word. Once the pictures have sizes, pad the
+     * stack out to the widest one, like 7TV does. Works in em from the
+     * natural aspect ratios (every emote is 1.35em tall, see .stv-emote), so
+     * it holds while chat is hidden and across text-size changes.
+     */
+    function aspect(img) {
+        return img.naturalHeight ? img.naturalWidth / img.naturalHeight : 0;
+    }
+
+    function fitStack(stack) {
+        var imgs = stack.getElementsByTagName("img");
+        var base = aspect(imgs[0]);
+        if (!base) { return; }
+        var widest = base;
+        for (var i = 1; i < imgs.length; i++) {
+            widest = Math.max(widest, aspect(imgs[i]));
+        }
+        var pad = (1.35 * (widest - base) / 2).toFixed(3) + "em";
+        stack.style.marginLeft = pad;
+        stack.style.marginRight = pad;
+    }
+
+    function watchStacks(node) {
+        var stacks = node.getElementsByClassName("stv-stack");
+        for (var i = 0; i < stacks.length; i++) {
+            var imgs = stacks[i].getElementsByTagName("img");
+            var fit = fitStack.bind(null, stacks[i]);
+            for (var j = 0; j < imgs.length; j++) {
+                imgs[j].onload = fit;
+            }
         }
     }
 
@@ -154,7 +194,8 @@ var StvChat = (function () {
     function ajax(url, callback) {
         var req = new XMLHttpRequest();
         req.open("GET", url, true);
-        req.timeout = 10000;
+        /* A big channel's 7TV set is ~2.3 MB of JSON; give a TV time to pull it */
+        req.timeout = 30000;
         req.onreadystatechange = function () {
             if (req.readyState === 4) {
                 if (req.status >= 200 && req.status < 300) {
@@ -168,44 +209,84 @@ var StvChat = (function () {
         req.send(null);
     }
 
-    function addBttvEmotes(list) {
+    /*
+     * Modifier emotes (BTTV "w!", FFZ "ffzW", ...) transform the previous
+     * emote rather than being pictures of their own, so they stay as text.
+     */
+    function addBttvEmotes(map, list) {
         if (!list) { return; }
         for (var i = 0; i < list.length; i++) {
             var e = list[i];
-            if (e && e.code && e.id) {
-                emoteMap[e.code] = "https://cdn.betterttv.net/emote/" + e.id + "/1x";
+            if (e && e.code && e.id && !e.modifier) {
+                map[e.code] = { url: "https://cdn.betterttv.net/emote/" + e.id + "/1x" };
             }
         }
     }
 
-    function add7tvEmotes(list) {
+    /*
+     * FrankerFaceZ, taken from BTTV's cache of it: the same host and CDN as
+     * BTTV, and exactly what the BTTV extension shows on twitch.tv (which is
+     * why viewers read these as "BTTV emotes").
+     */
+    function addFfzEmotes(map, list) {
+        if (!list) { return; }
+        for (var i = 0; i < list.length; i++) {
+            var e = list[i];
+            if (e && e.code && e.images && e.images["1x"] && !e.modifier) {
+                map[e.code] = { url: e.images["1x"] };
+            }
+        }
+    }
+
+    /* Flag bit 0 on a set entry marks a zero-width (overlay) emote */
+    function add7tvEmotes(map, list) {
         if (!list) { return; }
         for (var i = 0; i < list.length; i++) {
             var e = list[i];
             if (e && e.name && e.id) {
-                emoteMap[e.name] = "https://cdn.7tv.app/emote/" + e.id + "/1x.webp";
+                map[e.name] = { url: "https://cdn.7tv.app/emote/" + e.id + "/1x.webp", zw: (e.flags & 1) === 1 };
             }
         }
     }
 
     function loadEmotes() {
-        ajax("https://api.betterttv.net/3/cached/emotes/global", function (data) {
-            addBttvEmotes(data);
-        });
-        ajax("https://7tv.io/v3/emote-sets/global", function (data) {
-            add7tvEmotes(data && data.emotes);
-        });
-        if (channelId) {
-            ajax("https://api.betterttv.net/3/cached/users/twitch/" + channelId, function (data) {
-                if (data) {
-                    addBttvEmotes(data.channelEmotes);
-                    addBttvEmotes(data.sharedEmotes);
-                }
-            });
-            ajax("https://7tv.io/v3/users/twitch/" + channelId, function (data) {
-                add7tvEmotes(data && data.emote_set && data.emote_set.emotes);
+        /* Once per stream: toggling chat back on must not refetch every set */
+        if (emotesLoaded) { return; }
+        emotesLoaded = true;
+        var gen = emoteGen;
+        function load(url, handle) {
+            ajax(url, function (data) {
+                /* Drop a late answer for the previous stream */
+                if (data && gen === emoteGen) { handle(data); }
             });
         }
+        load("https://api.betterttv.net/3/cached/emotes/global", function (data) {
+            addBttvEmotes(globalEmotes, data);
+        });
+        load("https://api.betterttv.net/3/cached/frankerfacez/emotes/global", function (data) {
+            addFfzEmotes(globalEmotes, data);
+        });
+        load("https://7tv.io/v3/emote-sets/global", function (data) {
+            add7tvEmotes(globalEmotes, data.emotes);
+        });
+        if (channelId) {
+            load("https://api.betterttv.net/3/cached/users/twitch/" + channelId, function (data) {
+                addBttvEmotes(channelEmotes, data.channelEmotes);
+                addBttvEmotes(channelEmotes, data.sharedEmotes);
+            });
+            load("https://api.betterttv.net/3/cached/frankerfacez/users/twitch/" + channelId, function (data) {
+                addFfzEmotes(channelEmotes, data);
+            });
+            load("https://7tv.io/v3/users/twitch/" + channelId, function (data) {
+                add7tvEmotes(channelEmotes, data.emote_set && data.emote_set.emotes);
+            });
+        }
+    }
+
+    function findEmote(word) {
+        if (channelEmotes.hasOwnProperty(word)) { return channelEmotes[word]; }
+        if (globalEmotes.hasOwnProperty(word)) { return globalEmotes[word]; }
+        return null;
     }
 
     /* ------------------------------------------------------------------ */
@@ -231,23 +312,58 @@ var StvChat = (function () {
         return arr;
     }
 
-    function emoteImg(url) {
-        return "<img class=\"stv-emote\" src=\"" + url + "\" alt=\"\"/>";
+    function emoteImg(url, cls) {
+        return "<img class=\"" + cls + "\" src=\"" + escapeHtml(url) + "\" alt=\"\"/>";
     }
 
-    /* Replaces third-party (BTTV/7TV) emote words inside a plain text chunk */
-    function renderPlain(text) {
-        var parts = text.split(" ");
-        var out = [];
-        for (var i = 0; i < parts.length; i++) {
-            var word = parts[i];
-            if (word.length > 0 && emoteMap.hasOwnProperty(word)) {
-                out.push(emoteImg(emoteMap[word]));
-            } else {
-                out.push(escapeHtml(word));
-            }
+    /* A base emote with any zero-width overlays drawn on top of it */
+    function emoteHtml(urls) {
+        if (urls.length === 1) { return emoteImg(urls[0], "stv-emote"); }
+        var html = "<span class=\"stv-stack\">" + emoteImg(urls[0], "stv-emote");
+        for (var i = 1; i < urls.length; i++) {
+            html += emoteImg(urls[i], "stv-emote stv-zw");
         }
-        return out.join(" ");
+        return html + "</span>";
+    }
+
+    /* Splits a plain text chunk into word/space tokens, BTTV/FFZ/7TV words as emotes */
+    function tokenizePlain(text, tokens) {
+        var parts = text.split(" ");
+        for (var i = 0; i < parts.length; i++) {
+            if (i > 0) { tokens.push({ text: " " }); }
+            var word = parts[i];
+            if (word.length === 0) { continue; }
+            var emote = findEmote(word);
+            tokens.push(emote ? { url: emote.url, zw: emote.zw } : { text: word });
+        }
+    }
+
+    /*
+     * 7TV zero-width emotes (RainTime, MOONMOON's whole "...00" family) are
+     * overlays for the emote before them -- "PEPW twostar00" is one picture.
+     * Stack each onto the previous emote across the spaces between; with no
+     * emote before it, a zero-width emote just shows on its own.
+     */
+    function renderTokens(tokens) {
+        var groups = [];
+        for (var i = 0; i < tokens.length; i++) {
+            var tok = tokens[i];
+            if (tok.zw) {
+                var j = groups.length - 1;
+                while (j >= 0 && groups[j].text === " ") { j--; }
+                if (j >= 0 && groups[j].urls) {
+                    groups[j].urls.push(tok.url);
+                    groups.length = j + 1;
+                    continue;
+                }
+            }
+            groups.push(tok.url ? { urls: [tok.url] } : tok);
+        }
+        var out = [];
+        for (var k = 0; k < groups.length; k++) {
+            out.push(groups[k].urls ? emoteHtml(groups[k].urls) : escapeHtml(groups[k].text));
+        }
+        return out.join("");
     }
 
     function parseEmoteTag(tag) {
@@ -275,25 +391,26 @@ var StvChat = (function () {
 
     function renderMessage(text, emoteTag) {
         var emotes = parseEmoteTag(emoteTag);
+        var tokens = [];
         if (emotes.length === 0) {
-            return renderPlain(text);
+            tokenizePlain(text, tokens);
+            return renderTokens(tokens);
         }
         var cps = toCodePoints(text);
-        var out = [];
         var pos = 0;
         for (var i = 0; i < emotes.length; i++) {
             var em = emotes[i];
             if (em.s < pos || em.e >= cps.length) { continue; }
             if (em.s > pos) {
-                out.push(renderPlain(cps.slice(pos, em.s).join("")));
+                tokenizePlain(cps.slice(pos, em.s).join(""), tokens);
             }
-            out.push(emoteImg("https://static-cdn.jtvnw.net/emoticons/v2/" + em.id + "/default/dark/1.0"));
+            tokens.push({ url: "https://static-cdn.jtvnw.net/emoticons/v2/" + em.id + "/default/dark/1.0" });
             pos = em.e + 1;
         }
         if (pos < cps.length) {
-            out.push(renderPlain(cps.slice(pos).join("")));
+            tokenizePlain(cps.slice(pos).join(""), tokens);
         }
-        return out.join("");
+        return renderTokens(tokens);
     }
 
     function hashColor(name) {
@@ -423,7 +540,10 @@ var StvChat = (function () {
             if (!channelLogin) { return; }
             /* Reusable across streams (the self-rendered app keeps one instance) */
             disposed = false;
-            emoteMap = {};
+            channelEmotes = {};
+            globalEmotes = {};
+            emotesLoaded = false;
+            emoteGen++;
             channel = String(channelLogin).toLowerCase();
             channelId = cid || null;
             if (isEnabled()) {
