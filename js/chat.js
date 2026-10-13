@@ -1,6 +1,7 @@
 /*
- * Twitch chat overlay for the Smart Twitch TV player (MSX).
- * Anonymous IRC over WebSocket + Twitch/BTTV/FFZ/7TV emotes.
+ * Chat overlay for live playback — Twitch and Kick.
+ * Twitch: anonymous IRC over WebSocket + Twitch/BTTV/FFZ/7TV emotes.
+ * Kick: polled chat history + Kick/7TV emotes (see the Kick section below).
  * ES5 only: must run on old TV browsers (webOS 3+).
  */
 var StvChat = (function () {
@@ -23,8 +24,11 @@ var StvChat = (function () {
     var WIDTHS = { w30: "30%", w25: "25%", w20: "20%", w15: "15%", w10: "10%" };
     var WIDTH_ORDER = ["w30", "w25", "w20", "w15", "w10"];
 
+    /* "twitch" or "kick": which service the current stream's chat comes from */
+    var platform = "twitch";
     var channel = null;
     var channelId = null;
+    var kickUserId = null;
     var container = null;
     var headerEl = null;
     var msgsEl = null;
@@ -178,6 +182,7 @@ var StvChat = (function () {
     }
 
     function flush() {
+        if (kickPending.length > 0) { queue.push(kickPending.shift()); }
         if (queue.length > MAX_QUEUE) {
             queue = queue.slice(queue.length - MAX_QUEUE);
         }
@@ -260,14 +265,24 @@ var StvChat = (function () {
                 if (data && gen === emoteGen) { handle(data); }
             });
         }
+        load("https://7tv.io/v3/emote-sets/global", function (data) {
+            add7tvEmotes(globalEmotes, data.emotes);
+        });
+        /* 7TV is the one third-party emote service that exists on Kick; it
+           files a channel's set under the Kick user id, not the channel id. */
+        if (platform === "kick") {
+            if (kickUserId) {
+                load("https://7tv.io/v3/users/kick/" + kickUserId, function (data) {
+                    add7tvEmotes(channelEmotes, data.emote_set && data.emote_set.emotes);
+                });
+            }
+            return;
+        }
         load("https://api.betterttv.net/3/cached/emotes/global", function (data) {
             addBttvEmotes(globalEmotes, data);
         });
         load("https://api.betterttv.net/3/cached/frankerfacez/emotes/global", function (data) {
             addFfzEmotes(globalEmotes, data);
-        });
-        load("https://7tv.io/v3/emote-sets/global", function (data) {
-            add7tvEmotes(globalEmotes, data.emotes);
         });
         if (channelId) {
             load("https://api.betterttv.net/3/cached/users/twitch/" + channelId, function (data) {
@@ -413,6 +428,10 @@ var StvChat = (function () {
         return renderTokens(tokens);
     }
 
+    function nickHtml(name, color) {
+        return "<span class=\"stv-nick\" style=\"color:" + color + "\">" + escapeHtml(name) + "</span>: ";
+    }
+
     function hashColor(name) {
         var h = 0;
         for (var i = 0; i < name.length; i++) {
@@ -469,13 +488,12 @@ var StvChat = (function () {
             name = excl > 1 ? rest.substring(1, excl) : "chat";
         }
         var color = tags.color && tags.color.charAt(0) === "#" ? tags.color : hashColor(name);
-        var html = "<span class=\"stv-nick\" style=\"color:" + color + "\">" + escapeHtml(name) + "</span>: " +
-            renderMessage(text, tags.emotes || "");
-        queue.push(html);
+        queue.push(nickHtml(name, color) + renderMessage(text, tags.emotes || ""));
     }
 
     function disconnect() {
         connected = false;
+        kickStop();
         if (reconnectTimer != null) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
@@ -488,6 +506,7 @@ var StvChat = (function () {
     }
 
     function connect() {
+        if (platform === "kick") { kickStart(); return; }
         if (disposed || channel == null || ws != null) { return; }
         try {
             ws = new WebSocket(IRC_URL);
@@ -523,6 +542,104 @@ var StvChat = (function () {
     }
 
     /* ------------------------------------------------------------------ */
+    /* Kick                                                               */
+    /* ------------------------------------------------------------------ */
+
+    /*
+     * Kick's live chat is a Centrifugo WebSocket that refuses any connection
+     * whose Origin is not kick.com, and a browser cannot send a different
+     * Origin than its own. What a page on another origin can read is the chat
+     * history endpoint: the newest ~25 messages, newest first, cached at
+     * Kick's edge for ten seconds. So Kick chat is polled, and each batch is
+     * let out one message per flush tick rather than all at once. On a busy
+     * channel that makes it a sample of the chat, not all of it — and about
+     * as far behind as the video already is.
+     *
+     * The poll runs at half the cache window on purpose. At the full ten
+     * seconds it drifts in step with the cache, and a poll that lands just
+     * before a refresh gets the batch it already has — measured: every other
+     * poll came back empty and chat stalled for twenty seconds at a time.
+     * Polling faster than this buys nothing; the answer does not change.
+     */
+    var KICK_POLL_MS = 5000;
+    var KICK_SEEN_MAX = 200;
+    var kickTimer = null;
+    var kickPending = [];
+    var kickSeen = {};
+    var kickSeenOrder = [];
+    var kickPrimed = false;
+
+    /* Kick spells its own emotes inline, as "[emote:37226:KEKW]" */
+    function renderKickMessage(msg) {
+        var content = msg && typeof msg.content === "string" ? msg.content : "";
+        if (!content) { return null; }
+        var sender = msg.sender || {};
+        var name = sender.username || sender.slug || "chat";
+        var color = sender.identity ? String(sender.identity.color || "") : "";
+        /* It lands in a style attribute, so take nothing but a hex colour */
+        if (!/^#[0-9a-fA-F]{3,8}$/.test(color)) { color = hashColor(name); }
+        var tokens = [];
+        var re = /\[emote:(\d+):[^\]]*\]/g;
+        var pos = 0;
+        var hit;
+        while ((hit = re.exec(content)) !== null) {
+            if (hit.index > pos) { tokenizePlain(content.substring(pos, hit.index), tokens); }
+            tokens.push({ url: "https://files.kick.com/emotes/" + hit[1] + "/fullsize" });
+            pos = hit.index + hit[0].length;
+        }
+        if (pos < content.length) { tokenizePlain(content.substring(pos), tokens); }
+        return nickHtml(name, color) + renderTokens(tokens);
+    }
+
+    function kickPoll() {
+        var gen = emoteGen;
+        ajax("https://kick.com/api/v2/channels/" + encodeURIComponent(channelId) + "/messages", function (res) {
+            /* Drop a late answer for the previous stream */
+            if (disposed || gen !== emoteGen || platform !== "kick") { return; }
+            var list = res && res.data ? res.data.messages : null;
+            if (!list) { return; }
+            var fresh = [];
+            for (var i = list.length - 1; i >= 0; i--) {
+                var msg = list[i];
+                if (!msg || !msg.id || kickSeen[msg.id]) { continue; }
+                kickSeen[msg.id] = true;
+                kickSeenOrder.push(msg.id);
+                var html = null;
+                try { html = renderKickMessage(msg); } catch (e) { }
+                if (html) { fresh.push(html); }
+            }
+            while (kickSeenOrder.length > KICK_SEEN_MAX) {
+                delete kickSeen[kickSeenOrder.shift()];
+            }
+            /* The first answer is backlog: show it at once, so chat opens
+               full instead of filling in over the next ten seconds. */
+            if (!kickPrimed) {
+                kickPrimed = true;
+                queue = queue.concat(fresh);
+            } else {
+                kickPending = kickPending.concat(fresh);
+                if (kickPending.length > MAX_QUEUE) {
+                    kickPending = kickPending.slice(kickPending.length - MAX_QUEUE);
+                }
+            }
+        });
+    }
+
+    function kickStart() {
+        if (disposed || !channelId || kickTimer != null) { return; }
+        kickPoll();
+        kickTimer = setInterval(kickPoll, KICK_POLL_MS);
+    }
+
+    function kickStop() {
+        if (kickTimer != null) {
+            clearInterval(kickTimer);
+            kickTimer = null;
+        }
+        kickPending = [];
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Public interface                                                   */
     /* ------------------------------------------------------------------ */
 
@@ -535,20 +652,34 @@ var StvChat = (function () {
         }
     }
 
+    function begin(source, name, cid, userId) {
+        if (!name) { return; }
+        /* Reusable across streams (the self-rendered app keeps one instance) */
+        disconnect();
+        disposed = false;
+        channelEmotes = {};
+        globalEmotes = {};
+        emotesLoaded = false;
+        emoteGen++;
+        platform = source;
+        channel = String(name).toLowerCase();
+        channelId = cid || null;
+        kickUserId = userId || null;
+        kickSeen = {};
+        kickSeenOrder = [];
+        kickPrimed = false;
+        if (isEnabled()) {
+            start();
+        }
+    }
+
     return {
         init: function (channelLogin, cid) {
-            if (!channelLogin) { return; }
-            /* Reusable across streams (the self-rendered app keeps one instance) */
-            disposed = false;
-            channelEmotes = {};
-            globalEmotes = {};
-            emotesLoaded = false;
-            emoteGen++;
-            channel = String(channelLogin).toLowerCase();
-            channelId = cid || null;
-            if (isEnabled()) {
-                start();
-            }
+            begin("twitch", channelLogin, cid, null);
+        },
+        /* kickChannelId keys the chat history, kickUser the 7TV emote set */
+        initKick: function (slug, kickChannelId, kickUser) {
+            begin("kick", slug, kickChannelId, kickUser);
         },
         dispose: function () {
             disposed = true;

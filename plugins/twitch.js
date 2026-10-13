@@ -1272,6 +1272,16 @@
         chatKeyHandler = null;
     }
 
+    /*
+     * The overlay is not Twitch's alone: the Kick section (plugins/kick.js)
+     * plays through the same StvChat and wants the same panel button and
+     * colour keys, so they are offered to it here rather than copied.
+     */
+    window.StvChatControls = {
+        attach: function () { addChatButton(); bindChatKeys(); },
+        detach: function () { unbindChatKeys(); removeChatButton(); }
+    };
+
     function hookPlayer() {
         if (!Lampa.Player || !Lampa.Player.listener) { return; }
         Lampa.Player.listener.follow("start", function (data) {

@@ -684,16 +684,18 @@
 
         function place() {
             var list = $(".menu .menu__list").eq(0);
-            /* Sit directly under Twitch when it is present, else lead the list. */
-            var twitch = list.find('[data-action="twitch"]');
-            if (twitch.length) { twitch.after(button); }
+            /* Sit below the streaming sections — Kick, which itself sits under
+               Twitch, or Twitch alone — and lead the list when neither is here. */
+            var above = list.find('[data-action="kick"]');
+            if (!above.length) { above = list.find('[data-action="twitch"]'); }
+            if (above.length) { above.after(button); }
             else { list.prepend(button); }
-            /* Anchor by the Twitch entry's own label so this works in any UI language. */
-            var label = twitch.length ? twitch.find(".menu__text").text().trim() : null;
+            /* Anchor by that entry's own label so this works in any UI language. */
+            var label = above.length ? above.find(".menu__text").text().trim() : null;
             pinMenuOrder(t("baseball"), label);
         }
         place();
-        /* Runs after the Twitch plugin's own re-assert (1500ms) so we stay below it. */
+        /* Runs after the Twitch (1500ms) and Kick (1650ms) re-asserts so we stay below them. */
         setTimeout(place, 1800);
     }
 
