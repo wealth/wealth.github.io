@@ -8,18 +8,22 @@
  * is one horizontal line per league, so adding a league is a matter of adding
  * it to SOOP.LEAGUES — nothing here needs to change.
  *
- * Below the live line comes the fixture list, one line per day, so the tab still
- * answers "when is the next game" on a rest day. All times are rendered in the
- * viewer's own timezone: KBO's 18:30 first pitch is Korean wall clock, which is
- * a different hour — sometimes a different day — everywhere else.
+ * Below the live line come the replays — every finished game, in full, newest
+ * first — and then the fixture list, one line per day, so the tab still answers
+ * "when is the next game" on a rest day. All times are rendered in the viewer's
+ * own timezone: KBO's 18:30 first pitch is Korean wall clock, which is a
+ * different hour — sometimes a different day — everywhere else.
  */
 (function () {
     "use strict";
 
-    var VERSION = "1.1.0";
+    var VERSION = "1.2.0";
 
     /* Days of fixtures to show, today included. */
     var SCHEDULE_DAYS = 7;
+    /* Replays on the main page; the rest is behind "More", a screenful a time. */
+    var REPLAY_CARDS = 10;
+    var REPLAY_PAGE = 20;
     var ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9.2"/><path d="M5.2 5.4c2.6 2 4.2 4.9 4.5 8.1.2 2.3-.3 4.1-.9 5.6"/><path d="M18.8 5.4c-2.6 2-4.2 4.9-4.5 8.1-.2 2.3.3 4.1.9 5.6"/></svg>';
 
     function t(key) {
@@ -46,6 +50,39 @@
             };
             Lampa.Player.play(item);
             Lampa.Player.playlist([item]);
+        });
+    }
+
+    /*
+     * A finished game. Not "tv": it has a length, so it gets the timeline, and
+     * with four hours of it Lampa's own resume — it remembers where the viewer
+     * stopped and offers to continue — is most of what makes a replay usable.
+     */
+    function playReplay(replay) {
+        var cancelled = false;
+        Lampa.Loading.start(function () { cancelled = true; Lampa.Loading.stop(); });
+        SOOP.replayFiles(replay.id, function (err, files) {
+            if (cancelled) { return; }
+            Lampa.Loading.stop();
+            if (err || !files.length) {
+                /* A Worker deployed before /vod existed answers 404 — say that
+                   rather than "not available". */
+                Lampa.Noty.show(String(err).indexOf("404") >= 0 ? t("baseball_replay_worker") : (err || t("baseball_unavailable")));
+                return;
+            }
+            var list = [];
+            for (var i = 0; i < files.length; i++) {
+                var item = {
+                    title: replayTitle(replay) + " · " + dayTitle(replay.start) +
+                        (files.length > 1 ? " · " + (i + 1) + "/" + files.length : ""),
+                    url: files[i].url,
+                    timeline: Lampa.Timeline.view(Lampa.Utils.hash("soop_vod_" + replay.id + "_" + i))
+                };
+                if (files[i].quality) { item.quality = files[i].quality; }
+                list.push(item);
+            }
+            Lampa.Player.play(list[0]);
+            Lampa.Player.playlist(list);
         });
     }
 
@@ -89,7 +126,7 @@
         return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
     }
 
-    /* "Today" / "Tomorrow" / "Fri, 5 Sep", in the UI language. */
+    /* "Today" / "Tomorrow" / "Yesterday" / "Fri, 5 Sep", in the UI language. */
     function dayTitle(date) {
         var now = new Date();
         var from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -97,6 +134,7 @@
         var diff = Math.round((to.getTime() - from.getTime()) / 86400000);
         if (diff === 0) { return t("baseball_today"); }
         if (diff === 1) { return t("baseball_tomorrow"); }
+        if (diff === -1) { return t("baseball_yesterday"); }
         var parsed = Lampa.Utils.parseTime(date);
         return parsed.week + ", " + parsed["short"];
     }
@@ -156,6 +194,64 @@
             Lampa.Noty.show(game.away + " — " + game.home + " · " + dayTitle(game.start) +
                 " " + localTime(game.start) + (game.scored ? " · " + score : ""));
         });
+        return html;
+    }
+
+    function fmtDuration(sec) {
+        return Math.floor(sec / 3600) + ":" + pad2(Math.floor((sec % 3600) / 60)) + ":" + pad2(sec % 60);
+    }
+
+    var PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7z"/></svg>';
+
+    /* Named like the fixture cards when the teams are known. */
+    function replayTitle(replay) {
+        return replay.away ? replay.away + " — " + replay.home : replay.title;
+    }
+
+    /*
+     * Drawn as a fixture card — the two emblems — with a play mark where the
+     * fixture has its score. Deliberately no score here, though the schedule
+     * knows it: the point of a replay is a game whose result you have not
+     * seen. A game with no pairing to draw falls back to SOOP's thumbnail.
+     */
+    function replayCard(replay) {
+        var html = $('<div class="card selector layer--visible baseball-card baseball-sched">' +
+            '<div class="card__view"></div>' +
+            '<div class="card__title"></div>' +
+            '<div class="baseball-card__meta"></div>' +
+        '</div>');
+        var view = html.find(".card__view");
+
+        if (replay.away) {
+            view.append('<div class="baseball-sched__teams">' +
+                '<img class="baseball-sched__logo" src="" alt="">' +
+                '<div class="baseball-sched__score baseball-sched__play">' + PLAY_ICON + '</div>' +
+                '<img class="baseball-sched__logo" src="" alt="">' +
+            '</div>');
+            var logos = view.find(".baseball-sched__logo");
+            setLogo(logos.eq(0), replay.awayLogo);
+            setLogo(logos.eq(1), replay.homeLogo);
+        } else {
+            var img = $('<img class="card__img" src="./img/img_load.svg" alt="">');
+            img.on("error", function () { img.attr("src", "./img/img_broken.svg"); });
+            if (replay.thumb) { img.attr("src", replay.thumb); }
+            view.append(img);
+        }
+
+        html.find(".card__title").text(replayTitle(replay));
+        html.find(".baseball-card__meta").text(dayTitle(replay.start) + " · " + fmtDuration(replay.duration));
+        html.on("hover:enter", function () { playReplay(replay); });
+        return html;
+    }
+
+    function moreCard(onEnter) {
+        var html = $('<div class="card selector layer--visible baseball-card baseball-card--more">' +
+            '<div class="card__view"><div class="baseball-card__label"></div></div>' +
+            '<div class="card__title"></div>' +
+        '</div>');
+        html.find(".baseball-card__label").text(t("baseball_more"));
+        html.find(".card__title").text(t("baseball_more"));
+        html.on("hover:enter", onEnter);
         return html;
     }
 
@@ -255,22 +351,25 @@
         };
 
         /* Live state and the fixture list are independent upstreams behind the
-           same Worker, so fetch both at once and let either one fail alone. */
+           same Worker, and the replay list is read from SOOP directly, so fetch
+           all three at once and let any one fail alone. */
         this.load = function () {
             var self = this;
-            var pending = 2;
+            var pending = 3;
             var live = { err: null, groups: null };
             var sched = { err: null, games: null };
+            var replays = { err: null, page: null };
 
             function done() {
                 if (--pending > 0) { return; }
-                self.build(live, sched);
+                self.build(live, sched, replays);
             }
             SOOP.allGames(function (err, groups) { live.err = err; live.groups = groups; done(); });
             SOOP.kboSchedule(SCHEDULE_DAYS, function (err, games) { sched.err = err; sched.games = games; done(); });
+            SOOP.replayFeed().next(REPLAY_CARDS, function (err, page) { replays.err = err; replays.page = page; done(); });
         };
 
-        this.build = function (live, sched) {
+        this.build = function (live, sched, replays) {
             /* Neither half answered: that is the Worker itself, not one feed.
                The SOOP API is origin-locked, so without the proxy every call
                fails at the browser. */
@@ -296,6 +395,17 @@
                         cards: cards.length ? cards : [emptyCard(t("baseball_none_live"))]
                     });
                 }
+            }
+
+            /* Above the fixture list: these are something to watch, the list is
+               something to read. */
+            if (replays.err || !replays.page.items.length) {
+                this.appendLine({ title: t("baseball_replays"), cards: [emptyCard(t("baseball_no_replays"))] });
+            } else {
+                var recent = [];
+                for (var r = 0; r < replays.page.items.length; r++) { recent.push(replayCard(replays.page.items[r])); }
+                if (replays.page.hasNext) { recent.push(moreCard(openReplays)); }
+                this.appendLine({ title: t("baseball_replays"), cards: recent });
             }
 
             if (sched.err) {
@@ -401,6 +511,99 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Replays — the full archive, as a grid                              */
+    /* ------------------------------------------------------------------ */
+
+    function Replays() {
+        var scroll = new Lampa.Scroll({ mask: true, over: true });
+        var html = $('<div></div>');
+        var grid = $('<div class="baseball-grid category-full"></div>');
+        var feed = SOOP.replayFeed();
+        var hasNext = false;
+        var loading = false;
+        var last;
+
+        this.create = function () {
+            this.activity.loader(true);
+            scroll.minus();
+            scroll.append(grid);
+            html.append(scroll.render());
+            this.fetch(true);
+            return this.render();
+        };
+
+        this.fetch = function (first) {
+            var self = this;
+            if (loading) { return; }
+            loading = true;
+            feed.next(REPLAY_PAGE, function (err, page) {
+                loading = false;
+                if (first) { self.activity.loader(false); }
+                if (err || (first && !page.items.length)) {
+                    if (first) {
+                        var empty = new Lampa.Empty({ title: t("baseball_replays"), descr: t("baseball_no_replays") });
+                        html.empty().append(empty.render());
+                        self.start = empty.start.bind(empty);
+                    } else {
+                        Lampa.Noty.show(err);
+                    }
+                    self.activity.toggle();
+                    return;
+                }
+                for (var i = 0; i < page.items.length; i++) { self.appendCard(replayCard(page.items[i])); }
+                hasNext = page.hasNext;
+                if (Lampa.Layer) {
+                    Lampa.Layer.update(html);
+                    Lampa.Layer.visible(html);
+                }
+                self.activity.toggle();
+            });
+        };
+
+        this.appendCard = function (card) {
+            card.on("hover:focus", function () {
+                last = card[0];
+                scroll.update(card, true);
+            });
+            grid.append(card);
+        };
+
+        this.start = function () {
+            if (Lampa.Activity.active().activity !== this.activity) { return; }
+            var self = this;
+            Lampa.Controller.add("content", {
+                toggle: function () {
+                    Lampa.Controller.collectionSet(scroll.render());
+                    Lampa.Controller.collectionFocus(last || false, scroll.render());
+                },
+                left: function () {
+                    if (Navigator.canmove("left")) { Navigator.move("left"); }
+                    else { Lampa.Controller.toggle("menu"); }
+                },
+                right: function () { Navigator.move("right"); },
+                up: function () {
+                    if (Navigator.canmove("up")) { Navigator.move("up"); }
+                    else { Lampa.Controller.toggle("head"); }
+                },
+                down: function () {
+                    if (Navigator.canmove("down")) { Navigator.move("down"); }
+                    else if (hasNext) { self.fetch(false); }
+                },
+                back: function () { Lampa.Activity.backward(); }
+            });
+            Lampa.Controller.toggle("content");
+        };
+
+        this.pause = function () {};
+        this.stop = function () {};
+        this.render = function () { return html; };
+        this.destroy = function () {
+            scroll.destroy();
+            html.remove();
+        };
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Wiring                                                             */
     /* ------------------------------------------------------------------ */
 
@@ -426,6 +629,15 @@
             baseball_cancelled: { ru: "Отменён", en: "Cancelled", uk: "Скасовано" },
             baseball_no_games: { ru: "Игр не запланировано", en: "No games scheduled", uk: "Ігор не заплановано" },
             baseball_no_schedule: { ru: "Расписание недоступно", en: "Schedule unavailable", uk: "Розклад недоступний" },
+            baseball_yesterday: { ru: "Вчера", en: "Yesterday", uk: "Вчора" },
+            baseball_replays: { ru: "Записи матчей", en: "Replays", uk: "Записи матчів" },
+            baseball_more: { ru: "Ещё", en: "More", uk: "Ще" },
+            baseball_no_replays: { ru: "Записи недоступны", en: "Replays unavailable", uk: "Записи недоступні" },
+            baseball_replay_worker: {
+                ru: "Для записей нужен обновлённый worker/soop-proxy.js",
+                en: "Replays need the updated worker/soop-proxy.js",
+                uk: "Для записів потрібен оновлений worker/soop-proxy.js"
+            },
             baseball_schedule_worker: {
                 ru: "Расписание требует обновлённого worker/soop-proxy.js",
                 en: "Schedule needs the updated worker/soop-proxy.js",
@@ -441,6 +653,10 @@
 
     function openBaseball() {
         Lampa.Activity.push({ url: "", title: t("baseball"), component: "baseball", page: 1 });
+    }
+
+    function openReplays() {
+        Lampa.Activity.push({ url: "", title: t("baseball_replays"), component: "baseball_replays", page: 1 });
     }
 
     /*
@@ -492,6 +708,7 @@
 
         addLang();
         Lampa.Component.add("baseball", Main);
+        Lampa.Component.add("baseball_replays", Replays);
 
         if (window.appready) { addMenu(); }
         else {

@@ -23,7 +23,10 @@
  *
  * SOOP can only ever answer "is this channel live right now", so the KBO fixture
  * list comes from a second upstream (Naver) through the same Worker — see
- * kboSchedule() at the bottom of this file.
+ * kboSchedule() further down.
+ *
+ * Finished games stay up as full-length replays on the channel that carried
+ * them — see replayFeed() and replayFiles() at the bottom of this file.
  */
 var SOOP = (function () {
     "use strict";
@@ -243,12 +246,13 @@ var SOOP = (function () {
 
     /*
      * gameDateTime is "2026-09-03T18:30:00" — a Korean wall clock with no
-     * offset. ES5 and ES6 disagree on how to parse that shape (UTC vs local),
+     * offset (SOOP's replay list writes the same thing with a space for the
+     * "T"). ES5 and ES6 disagree on how to parse that shape (UTC vs local),
      * and old TV browsers are exactly where that bites, so build the instant by
      * hand. KST is UTC+9 year round; Korea has no DST.
      */
     function kstToDate(text) {
-        var m = String(text || "").match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+        var m = String(text || "").match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
         if (!m) { return null; }
         return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 9, +m[5], +(m[6] || 0)));
     }
@@ -299,9 +303,203 @@ var SOOP = (function () {
         });
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Replays                                                            */
+    /* ------------------------------------------------------------------ */
+
+    /*
+     * Every game stays up afterwards as a full-length replay on the channel
+     * that carried it; SOOP keeps them for a year. Listing them needs no proxy
+     * — the station API answers any Origin — so only the call that turns a
+     * replay into playlist URLs goes through the Worker (route /vod).
+     */
+    var STATION = "https://chapi.sooplive.co.kr/api/";
+
+    /*
+     * A replay's own thumbnail is the frame its broadcast opened on, and every
+     * broadcast opens on the same "the streaming will start soon" slate — a
+     * row of them is a row of one picture. What tells games apart is who
+     * played, so find the teams. SOOP titles name a team by the first word of
+     * its name in capitals ("LOTTE", "KIA"), which is enough to reach the
+     * Naver code and, through it, the full name and emblem the schedule uses.
+     */
+    var KBO_CODES = {};
+    for (var teamCode in KBO_TEAMS) {
+        if (KBO_TEAMS.hasOwnProperty(teamCode)) {
+            KBO_CODES[KBO_TEAMS[teamCode].split(" ")[0].toUpperCase()] = teamCode;
+        }
+    }
+
+    function emblem(code) {
+        return "https://sports-phinf.pstatic.net/team/kbo/default/" + code + ".png";
+    }
+
+    function mapReplay(v) {
+        var ucc = v && v.ucc;
+        if (!ucc || !v.title_no) { return null; }
+        var ended = kstToDate(v.reg_date);
+        if (!ended) { return null; }
+        var seconds = Math.floor((ucc.total_file_duration || 0) / 1000);
+        var thumb = String(ucc.thumb || "");
+        var parsed = parseTitle(v.title_name);
+        var away = KBO_CODES[parsed.away.toUpperCase()];
+        var home = KBO_CODES[parsed.home.toUpperCase()];
+        /* Both or neither: an all-star game, or the odd title in Korean, has
+           no pairing to draw and keeps its title and thumbnail instead. */
+        var known = !!(away && home);
+        return {
+            id: v.title_no,
+            title: parsed.teams || v.title_name,
+            away: known ? KBO_TEAMS[away] : "",
+            home: known ? KBO_TEAMS[home] : "",
+            awayLogo: known ? emblem(away) : "",
+            homeLogo: known ? emblem(home) : "",
+            /* reg_date is when the broadcast ended and the list carries no
+               start time, so count back from it. */
+            start: new Date(ended.getTime() - seconds * 1000),
+            duration: seconds,
+            thumb: thumb.indexOf("//") === 0 ? "https:" + thumb : thumb
+        };
+    }
+
+    /*
+     * Replays across every channel, newest first, a screenful at a time:
+     *   var feed = SOOP.replayFeed(); feed.next(20, function (err, page) {})
+     * where page is { items, hasNext }.
+     *
+     * Each channel has its own list, 20 a page, and they do not line up — the
+     * channels that sit idle on a light day fall weeks behind the busy one, so
+     * page 2 of one is newer than page 1 of another. Stitching "page N of
+     * every channel" together would therefore come out of order at every page
+     * boundary. This is a merge instead: a buffer per channel, always hand out
+     * the newest head, and read a channel's next page only when its buffer
+     * runs dry.
+     */
+    function replayFeed() {
+        var feeds = [];
+        var reached = false;
+        for (var l = 0; l < LEAGUES.length; l++) {
+            for (var c = 0; c < LEAGUES[l].channels.length; c++) {
+                feeds.push({ bid: LEAGUES[l].channels[c], page: 0, buffer: [], done: false });
+            }
+        }
+
+        function load(feed, callback) {
+            getJSON(STATION + encodeURIComponent(feed.bid) + "/vods/review?page=" + (feed.page + 1), function (err, data) {
+                var list = !err && data && data.data ? data.data : null;
+                if (list) { reached = true; }
+                /* A channel that fails drops out instead of stalling the rest. */
+                if (!list || !list.length) { feed.done = true; }
+                else {
+                    feed.page++;
+                    for (var i = 0; i < list.length; i++) {
+                        var replay = mapReplay(list[i]);
+                        if (replay) { feed.buffer.push(replay); }
+                    }
+                    if (!data.meta || feed.page >= data.meta.last_page) { feed.done = true; }
+                }
+                callback();
+            });
+        }
+
+        /* Tops up every channel that is empty but not finished. */
+        function refill(callback) {
+            var pending = 0;
+            function one() {
+                if (--pending === 0) { callback(); }
+            }
+            for (var i = 0; i < feeds.length; i++) {
+                if (!feeds[i].buffer.length && !feeds[i].done) {
+                    pending++;
+                    load(feeds[i], one);
+                }
+            }
+            if (!pending) { callback(); }
+        }
+
+        function next(count, callback) {
+            var out = [];
+            (function step() {
+                refill(function () {
+                    while (out.length < count) {
+                        var newest = null;
+                        var dry = false;
+                        for (var i = 0; i < feeds.length; i++) {
+                            var feed = feeds[i];
+                            if (!feed.buffer.length) {
+                                if (!feed.done) { dry = true; }
+                                continue;
+                            }
+                            if (!newest || feed.buffer[0].start > newest.buffer[0].start) { newest = feed; }
+                        }
+                        /* An unread page may hold something newer than every
+                           head we have, so read it before handing out more. */
+                        if (dry) { step(); return; }
+                        if (!newest) { break; }
+                        out.push(newest.buffer.shift());
+                    }
+                    if (!reached) { callback("Could not reach SOOP", null); return; }
+                    var more = false;
+                    for (var k = 0; k < feeds.length; k++) {
+                        if (feeds[k].buffer.length || !feeds[k].done) { more = true; }
+                    }
+                    callback(null, { items: out, hasNext: more });
+                });
+            })();
+        }
+
+        return { next: next };
+    }
+
+    /*
+     * Playlist URLs for one replay: [{ url, quality }], one entry per file. A
+     * broadcast that was interrupted is stored as several files, in order.
+     *
+     * url is the best rendition rather than the adaptive master SOOP also
+     * offers: a TV's native player given a master tends to settle on its
+     * lowest rung. quality is keyed "1080p" / "720p" / "540p", which is the
+     * shape Lampa's player reads its default-quality setting against and
+     * builds its quality menu from.
+     */
+    function replayFiles(id, callback) {
+        getJSON(PROXY + "/vod?id=" + encodeURIComponent(id), function (err, res) {
+            if (err) { callback(err, null); return; }
+            var data = res && res.result === 1 ? res.data : null;
+            var files = data && data.files ? data.files.slice() : [];
+            files.sort(function (a, b) { return (a.file_order || 0) - (b.file_order || 0); });
+
+            var out = [];
+            for (var i = 0; i < files.length; i++) {
+                var info = files[i].quality_info || [];
+                var quality = {};
+                var count = 0;
+                var best = null;
+                var bestHeight = 0;
+                for (var k = 0; k < info.length; k++) {
+                    /* The "Auto" entry has no resolution: that is the master. */
+                    var height = parseInt(String(info[k].resolution || "").split("x")[1], 10);
+                    if (!height || !info[k].file) { continue; }
+                    quality[height + "p"] = info[k].file;
+                    count++;
+                    if (height > bestHeight) { bestHeight = height; best = info[k].file; }
+                }
+                var url = best || files[i].file;
+                if (url) { out.push({ url: url, quality: count > 1 ? quality : null }); }
+            }
+            if (!out.length) {
+                /* SOOP explains itself here: "This VOD does not exist." */
+                callback(res && res.data && res.data.message ? res.data.message : "Replay is not available", null);
+                return;
+            }
+            callback(null, out);
+        });
+    }
+
     return {
         LEAGUES: LEAGUES,
         kboSchedule: kboSchedule,
+        replayFeed: replayFeed,
+        replayFiles: replayFiles,
         channel: channel,
         leagueGames: leagueGames,
         allGames: allGames,

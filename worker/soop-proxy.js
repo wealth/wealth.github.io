@@ -9,7 +9,7 @@
  * Twitch usher URLs) — so ONLY the three small JSON/handshake calls need
  * proxying, never the playlist or the .TS segments.
  *
- * Do NOT add edge caching to the three SOOP routes (unlike worker/tmdb-proxy.js):
+ * Do NOT add edge caching to the three live routes (unlike worker/tmdb-proxy.js):
  * the AID token is short-lived and live/offline state flips constantly, so a
  * cached response hands the TV a dead stream. /schedule is the exception and
  * says why at the route.
@@ -22,20 +22,23 @@
  *   4. Verify: https://soop.demitori.com/live?bid=kboglobal1 returns JSON with
  *      a CHANNEL object (RESULT 1 while a game is on, 0 when idle).
  *   Re-paste and Deploy again whenever this file changes -- the Worker is not
- *   built from the repo. /schedule was added after the first deploy, so an
- *   un-redeployed Worker answers it with 404 and the app shows the fixture list
- *   as unavailable while live games keep working.
+ *   built from the repo. /schedule and /vod were added after the first deploy,
+ *   so an un-redeployed Worker answers them with 404: the app then shows the
+ *   fixture list as unavailable, or says a replay needs the updated Worker,
+ *   while live games keep working.
  *
  * Routes by path:
  *   /live?bid=<id>                      -> player_live_api.php  (channel + BNO)
  *   /aid?bid=<id>&bno=<n>[&quality=..]  -> player_live_api.php  (AID token)
  *   /assign?cdn=<cdn>&key=<broad_key>   -> broad_stream_assign.html (view_url)
  *   /schedule?from=&to= (YYYY-MM-DD)    -> Naver sports API (KBO fixture list)
+ *   /vod?id=<title_no>                  -> station/video/a/view (replay files)
  */
 
 const LIVE_API = "https://live.sooplive.co.kr/afreeca/player_live_api.php";
 const ASSIGN = "https://livestream-manager.sooplive.com/broad_stream_assign.html";
 const SCHEDULE = "https://api-gw.sports.naver.com/schedule/games";
+const VOD_API = "https://api.m.sooplive.co.kr/station/video/a/view";
 
 const CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -150,6 +153,26 @@ export default {
                     { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" } }
                 );
                 return json(await res.text(), res.status, "public, max-age=300");
+            }
+
+            /* 5) Replay of a finished game: the playlist URLs behind a title
+                  number from the channel's replay list. The list itself is
+                  readable from any origin and never comes through here; this
+                  call answers only sooplive origins, and only as a POST. */
+            if (url.pathname === "/vod") {
+                const id = q.get("id") || "";
+                if (!/^\d+$/.test(id)) return json('{"error":"id must be a number"}', 400);
+                const res = await fetch(VOD_API, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        Referer: "https://vod.sooplive.co.kr/player/" + id,
+                        Origin: "https://vod.sooplive.co.kr",
+                        "User-Agent": "Mozilla/5.0",
+                    },
+                    body: "nTitleNo=" + id + "&nApiLevel=10&nPlaylistIdx=0",
+                });
+                return json(await res.text(), res.status);
             }
         } catch (e) {
             return json('{"error":"upstream: ' + String(e).replace(/"/g, "'") + '"}', 502);

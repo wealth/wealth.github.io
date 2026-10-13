@@ -117,3 +117,39 @@
 .baseball-card__tag--muted {
     background: rgba(255, 255, 255, 0.2);
 }
+
+/* ------------------------------------------------------------------------ */
+/* Replays — "More" at the end of the line, and the archive grid behind it   */
+/* ------------------------------------------------------------------------ */
+
+/* A replay is a fixture card with a play mark in place of the score. */
+.baseball-sched__play svg {
+    width: 2em;
+    height: 2em;
+    vertical-align: middle;
+    opacity: 0.85;
+}
+.baseball-card--more .card__view {
+    background: rgba(255, 255, 255, 0.08);
+}
+.baseball-card__label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2em;
+}
+/* Comes after the ".baseball-card + .baseball-card" rule on purpose: same
+   specificity, and in a wrapping grid every card needs the same margins. */
+.baseball-grid {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 1em 1em 2em;
+}
+.baseball-grid .card {
+    margin: 0 1.2em 1.6em 0;
+}
