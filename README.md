@@ -1,8 +1,8 @@
 # Lampa + Twitch
 
-A fork of [Lampa](https://github.com/yumata/lampa) with **Twitch as a first-class sidebar section**.
+A fork of [Lampa](https://github.com/yumata/lampa) with **Twitch, Kick and live baseball as first-class sidebar sections**.
 
-Lampa is a free media catalog for Smart TVs (movies and series via public metadata). This fork keeps that app and adds the unofficial Twitch client that used to live in this repo as a standalone Media Station X plugin.
+Lampa is a free media catalog for Smart TVs (movies and series via public metadata). This fork keeps that app and adds the unofficial Twitch client that used to live in this repo as a standalone Media Station X plugin, plus a Kick section and a Baseball section built the same way.
 
 Sources for Lampa itself: [yumata/lampa-source](https://github.com/yumata/lampa-source).
 
@@ -36,10 +36,51 @@ plugins/twitch.js   Lampa section (menu, catalog, channel, login, player hook)
 plugins/twitch.css  Cards, channel page, chat overlay
 js/twitch.js        Twitch GQL / playback
 js/auth.js          OAuth device-code login
-js/chat.js          IRC chat overlay
+js/chat.js          Chat overlay (shared with Kick)
 ```
 
-Not affiliated with Twitch, Amazon, or Lampa’s authors.
+## Kick section
+
+Open **Kick** in the Lampa sidebar (directly under Twitch).
+
+- **Featured** (in the app's language where Kick has picks for it, English otherwise), **Top streams** and **Categories**
+- **Search** for channels and categories
+- **Favorites** stored on the device — Kick has no TV login flow, so this stands in for "following"
+- **Channel pages** with recent VODs; VODs resume where you stopped
+- **Chat overlay** on live playback (Kick / 7TV emotes), with the same button, remote keys and **Settings → Twitch** layout options as Twitch chat
+
+Long-press a live card to open the channel page.
+
+Two things work differently from Twitch, both because of what Kick lets another origin do:
+
+- **Chat is sampled, not complete.** Kick's live chat socket only accepts connections from kick.com, so the overlay polls the public chat history instead: the newest ~25 messages every few seconds. Quiet chats come through whole; busy ones are a sample.
+- **Live quality is chosen by the TV.** The live playlist cannot be read from another origin, so there is no quality picker for live streams. VODs do get one.
+
+```
+plugins/kick.js     Lampa section (menu, catalog, channel, player hook)
+plugins/kick.css    Cards and channel page
+js/kick.js          kick.com API (no key, no proxy)
+js/chat.js          Chat overlay, shared with Twitch
+```
+
+## Baseball section
+
+Open **Baseball** in the Lampa sidebar. It carries KBO (Korean baseball), which SOOP streams free worldwide.
+
+- **Live now** — every game in progress
+- **Replays** — every finished game in full, newest first, up to 1080p; **More** opens the whole archive (SOOP keeps a year). Replays resume where you stopped, and deliberately show no scores
+- **Schedule** — the next seven days in your own timezone, with scores for today's games
+
+```
+plugins/baseball.js   Lampa section (live, replays, schedule)
+plugins/baseball.css  Cards
+js/soop.js            SOOP API + KBO schedule
+worker/soop-proxy.js  Cloudflare Worker in front of the origin-locked SOOP calls
+```
+
+The Worker is deployed by hand (steps are at the top of the file) and is **not rebuilt from the repo**: re-paste it into Cloudflare whenever `worker/soop-proxy.js` changes. Until then the app says which feature is waiting for it — replays, for instance, list fine but need the `/vod` route to play.
+
+Not affiliated with Twitch, Kick, SOOP, Amazon, or Lampa’s authors.
 
 ## Install for MSX
 
@@ -76,7 +117,7 @@ Only the bokeh background images still load from `yumata.github.io` (cosmetic, n
 npx http-server . -p 8080 --cors
 ```
 
-Open `http://localhost:8080`. Twitch browsing works in a desktop browser; **live video usually only plays on a real TV** (Twitch CDN CORS).
+Open `http://localhost:8080`. Twitch and Kick browsing work in a desktop browser; **live video usually only plays on a real TV** (the Twitch and Kick CDNs only answer their own sites' scripts). Kick VODs and baseball replays play on desktop too.
 
 ## Upstream
 
