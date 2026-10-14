@@ -69,7 +69,7 @@
 
     <!-- Strip ads + CUB telemetry and route TMDB direct. Must run after jQuery
          and before app.min.js so it can wrap $.ajax first. -->
-    <script src="./js/nocub.js?v=6"></script>
+    <script src="./js/nocub.js?v=7"></script>
 
     <script>
         var lampa_url     = '';
@@ -157,9 +157,17 @@
             })
         }
 
+        /* Torrent search fix for anime (js/torrent-search.js). Wraps
+           Lampa.Parser, so it only needs app.min.js. */
+        function loadTorrentSearch() {
+            putScript('js/torrent-search.js?v=' + cache_version, function () {
+                loadTwitchPlugin()
+            })
+        }
+
         function loadCurrentLampa() {
             putScript('app.min.js?v=' + cache_version, function () {
-                loadTwitchPlugin()
+                loadTorrentSearch()
             })
         }
 

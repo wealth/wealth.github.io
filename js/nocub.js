@@ -23,9 +23,17 @@
     // directly (CloudFront/BunnyCDN), so route metadata + posters through a
     // Cloudflare host it CAN reach. Worker code: worker/tmdb-proxy.js.
     // Set TMDB_PROXY to "" to go straight to TMDB (only where reachable).
-    var TMDB_PROXY = "https://tmdb.demitori.com";
+    // window.TMDB_PROXY overrides it (set before this file loads) so a local
+    // copy of the Worker can be tested before it is deployed.
+    var TMDB_PROXY = window.TMDB_PROXY || "https://tmdb.demitori.com";
     var TMDB_API = (TMDB_PROXY || "https://api.themoviedb.org") + "/3/";
     var TMDB_IMG = (TMDB_PROXY || "https://image.tmdb.org") + "/";
+
+    // Lampa caches TMDB responses in IndexedDB by URL for up to 7 days, so a
+    // Worker fix to TMDB data only reaches the TV once those entries expire.
+    // Bumping this adds a new rev= to every TMDB URL and drops them at once.
+    // Deploy the Worker first, or the unfixed data is cached under the new URLs.
+    var TMDB_REV = 2;
 
     // Rewrite cub TMDB mirrors (and any direct TMDB host) -> the proxy, and the
     // upstream bokeh backgrounds (yumata.github.io, dead on this TV) -> local.
@@ -143,15 +151,33 @@
     } catch (e) {}
 
     /* 3) Once Lampa is up, override TMDB.api/image at the source too. */
+
+    // Lampa's TMDB Proxy module assigns its own TMDB.api/image at startup,
+    // after this runs, so a plain assignment here gets replaced. An accessor
+    // keeps wrapping whatever is assigned later.
+    function hook(T, name, wrap) {
+        var inner = T[name];
+        function outer() { return wrap(inner.apply(this, arguments)); }
+        Object.defineProperty(T, name, {
+            configurable: true,
+            enumerable: true,
+            get: function () { return outer; },
+            set: function (fn) { inner = fn; }
+        });
+    }
+
     var tries = 0;
     var settle = setInterval(function () {
         tries++;
         var L = window.Lampa;
         if (L && L.TMDB) {
             if (!L.TMDB.__nocub) {
-                var _api = L.TMDB.api, _image = L.TMDB.image;
-                L.TMDB.api = function (u) { return toDirect(_api.call(this, u)); };
-                L.TMDB.image = function (u) { return toDirect(_image.call(this, u)); };
+                // Lampa's request cache keys on this URL, so rev= lands in it.
+                hook(L.TMDB, "api", function (u) {
+                    u = toDirect(u);
+                    return u + (u.indexOf("?") >= 0 ? "&" : "?") + "rev=" + TMDB_REV;
+                });
+                hook(L.TMDB, "image", toDirect);
                 L.TMDB.__nocub = true;
             }
             if (window.lampa_settings) {
