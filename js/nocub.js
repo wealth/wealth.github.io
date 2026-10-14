@@ -180,6 +180,18 @@
                 hook(L.TMDB, "image", toDirect);
                 L.TMDB.__nocub = true;
             }
+            // Search shows a tab per source; the CUB one asks tmdb.cub.* (blocked
+            // above), so it never finds anything. Leave it out.
+            if (L.Api && L.Api.availableDiscovery && L.Api.sources && L.Api.sources.cub && !L.Api.__nocub) {
+                var cubSearch = L.Api.sources.cub.discovery().search;
+                var available = L.Api.availableDiscovery;
+                L.Api.availableDiscovery = function () {
+                    return available.apply(this, arguments).filter(function (s) {
+                        return s.search !== cubSearch;
+                    });
+                };
+                L.Api.__nocub = true;
+            }
             if (window.lampa_settings) {
                 window.lampa_settings.account_use = false;
                 window.lampa_settings.account_sync = false;
