@@ -1,5 +1,6 @@
-/* torrent-search.js — find every season of an anime series in the torrent search.
+/* torrent-search.js — torrent search fixes.
  *
+ * 1) Find every season of an anime series.
  * Lampa searches the torrent parser with the card's original title and, for a
  * series, asks jac.red for an exact match on it. For anime that is the
  * Japanese title (Re:ゼロから始める異世界生活), which trackers hardly use:
@@ -7,6 +8,8 @@
  * under the romaji title instead ("Re:Zero kara Hajimeru Isekai Seikatsu":
  * 84 torrents, every season), so for an anime series we run that search as
  * well and merge the two result lists.
+ *
+ * 2) Leave the Ukrainian trackers mazepa and toloka out of jac.red results.
  *
  * Loaded after app.min.js; wraps Lampa.Parser.get, which the torrents screen
  * calls. ES5: old webOS / Tizen browsers.
@@ -16,8 +19,14 @@
 
     var ANIMATION = 16; // TMDB genre id
     var ANIME_LANGUAGES = ["ja", "zh"]; // same test as Lampa's own isAnimeMovie
-    var LATIN = /^[ -ɏ‐-‧]+$/;
-    var SPACING = 1000; // ms between the starts of the two searches
+    var LATIN = /^[\u0020-\u024F\u2010-\u2027]+$/;
+    var SPACING = 1000; // ms from the end of the first search to the second
+    var RETRY = 2000;   // ms before the one retry of a failed romaji search
+
+    // jac.red's Tracker field names every tracker carrying the same torrent
+    // ("mazepa, toloka"). A torrent also carried by another tracker stays,
+    // listed under that one only.
+    var HIDDEN_TRACKERS = ["mazepa", "toloka"];
 
     function isAnimeSeries(movie) {
         if (!movie || !movie.original_name) return false;
@@ -65,6 +74,22 @@
         return out;
     }
 
+    function withoutHiddenTrackers(results) {
+        var out = [];
+        for (var i = 0; i < results.length; i++) {
+            var trackers = String(results[i].Tracker || "").split(",");
+            var kept = [];
+            for (var j = 0; j < trackers.length; j++) {
+                var name = trackers[j].trim();
+                if (HIDDEN_TRACKERS.indexOf(name.toLowerCase()) < 0) kept.push(name);
+            }
+            if (!kept.length) continue;
+            if (kept.length < trackers.length) results[i].Tracker = kept.join(", ");
+            out.push(results[i]);
+        }
+        return out;
+    }
+
     function start() {
         var get = Lampa.Parser.get;
         var clear = Lampa.Parser.clear;
@@ -89,38 +114,58 @@
             extra.search = romaji;
             extra.clarification = true;
 
-            // One after the other, starting at least SPACING ms apart: jac.red
-            // answers a request that starts ~300 ms after the previous one
-            // with a 429 that has no CORS header (600 ms is fine), and a
-            // cached first answer can come back that fast.
+            // One after the other, with a pause: jac.red answers a request
+            // that reaches it soon after the previous one with a 429 that
+            // has no CORS header. Two starts 300 ms apart fail, 600 ms pass,
+            // and even 1 s from the first start failed on the TV-like flow:
+            // the first request pays for the new connection and so reaches
+            // the server late. Hence SPACING from the first one's end, and
+            // one retry.
             var self = this;
-            var started = Date.now();
             var generation = clears;
-            function then(run) {
+            function later(ms, run) {
                 setTimeout(function () {
                     // The torrents screen closed meanwhile (it calls Parser.clear).
                     if (generation === clears) run();
-                }, Math.max(0, SPACING - (Date.now() - started)));
+                }, ms);
             }
-            get.call(self, params, function (json) {
-                then(function () {
-                    get.call(self, extra, function (more) {
-                        json.Results = merge([json.Results || [], (more && more.Results) || []]);
-                        oncomplite(json);
-                    }, function () {
-                        oncomplite(json);
+            function romajiSearch(done, fail) {
+                later(SPACING, function () {
+                    get.call(self, extra, done, function () {
+                        later(RETRY, function () {
+                            get.call(self, extra, done, fail);
+                        });
                     });
                 });
+            }
+            get.call(self, params, function (json) {
+                romajiSearch(function (more) {
+                    json.Results = merge([json.Results || [], (more && more.Results) || []]);
+                    oncomplite(json);
+                }, function () {
+                    oncomplite(json);
+                });
             }, function (e) {
-                then(function () {
-                    get.call(self, extra, oncomplite, function () {
-                        onerror(e);
-                    });
+                romajiSearch(oncomplite, function () {
+                    onerror(e);
                 });
             });
         };
     }
 
-    if (window.Lampa && Lampa.Parser && Lampa.Parser.get) start();
-    else console.log("Torrent search", "Lampa.Parser is not available");
+    /* Every Jackett-style answer (jac.red), from the torrents screen and from
+       the global search alike, passes through here before its caller sees it. */
+    function hideTrackers() {
+        Lampa.Listener.follow("request_secuses", function (e) {
+            var data = e.data;
+            if (!data || !Lampa.Arrays.isArray(data.Results)) return;
+            if (!/\/api\/v2\.0\/indexers\//.test((e.params && e.params.url) || "")) return;
+            data.Results = withoutHiddenTrackers(data.Results);
+        });
+    }
+
+    if (window.Lampa && Lampa.Parser && Lampa.Parser.get) {
+        start();
+        hideTrackers();
+    } else console.log("Torrent search", "Lampa.Parser is not available");
 })();
