@@ -22,7 +22,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.0.0";
+    var VERSION = "1.0.1";
     var SERVER = "https://ntfy.sh";
     var MAX_AGE = 120;
     var KEY_ON = "remote_enabled";
@@ -43,6 +43,10 @@
     var retryDelay = 2000;
     var seen = {};
     var readyAt = 0;
+    /* off | connecting | connected | error | unsupported — shown in Settings. */
+    var status = "off";
+    var statusAt = 0;
+    var announced = false;
 
     function t(key) {
         return Lampa.Lang.translate(key);
@@ -129,7 +133,36 @@
 
         var cmd;
         try { cmd = JSON.parse(msg.message); } catch (x) { return; }
-        if (cmd && cmd.action) { run(cmd); }
+        if (cmd && cmd.action) {
+            Lampa.Noty.show(t("remote") + ": " + cmd.action + " " + cmd.value);
+            run(cmd);
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Status                                                             */
+    /* ------------------------------------------------------------------ */
+
+    function setStatus(value) {
+        status = value;
+        statusAt = Date.now();
+    }
+
+    function statusText() {
+        var key = enabled() ? status : "off";
+        var at = new Date(statusAt);
+        var clock = statusAt ? " · " + at.getHours() + ":" + (at.getMinutes() < 10 ? "0" : "") + at.getMinutes() : "";
+        return t("remote_status_" + key) + (key === "off" ? "" : clock);
+    }
+
+    /* Once per page load, tell <topic>-status that this device is listening,
+       so whoever set it up can check from outside without seeing the screen. */
+    function report() {
+        try {
+            var req = new XMLHttpRequest();
+            req.open("POST", SERVER + "/" + topic() + "-status", true);
+            req.send(JSON.stringify({ status: status, version: VERSION, ua: navigator.userAgent }));
+        } catch (e) { }
     }
 
     /* ------------------------------------------------------------------ */
@@ -150,15 +183,28 @@
        on an HTTP error, though, so that case is retried here with backoff. */
     function start() {
         stop();
-        if (!enabled() || typeof EventSource === "undefined") { return; }
+        if (!enabled()) { setStatus("off"); return; }
+        if (typeof EventSource === "undefined") { setStatus("unsupported"); return; }
+        setStatus("connecting");
         source = new EventSource(SERVER + "/" + topic() + "/sse?since=" + MAX_AGE + "s");
-        source.onopen = function () { retryDelay = 2000; };
+        source.onopen = function () {
+            retryDelay = 2000;
+            setStatus("connected");
+            if (!announced) {
+                announced = true;
+                Lampa.Noty.show(t("remote") + ": " + t("remote_status_connected"));
+                report();
+            }
+        };
         source.onmessage = onMessage;
         source.onerror = function () {
             if (source && source.readyState === 2) {
                 stop();
+                setStatus("error");
                 retryTimer = setTimeout(start, retryDelay);
                 retryDelay = Math.min(retryDelay * 2, 60000);
+            } else {
+                setStatus("connecting");
             }
         };
     }
@@ -182,6 +228,12 @@
                 en: "Enter it in Home Assistant. Other Lampa devices don't know it.",
                 uk: "Вкажіть його в Home Assistant. Інші пристрої з Lampa його не знають."
             },
+            remote_status: { ru: "Статус", en: "Status", uk: "Статус" },
+            remote_status_off: { ru: "выключено", en: "off", uk: "вимкнено" },
+            remote_status_connecting: { ru: "подключение…", en: "connecting…", uk: "підключення…" },
+            remote_status_connected: { ru: "подключено", en: "connected", uk: "підключено" },
+            remote_status_error: { ru: "нет связи с ntfy.sh", en: "can't reach ntfy.sh", uk: "немає зв'язку з ntfy.sh" },
+            remote_status_unsupported: { ru: "не поддерживается браузером", en: "not supported by this browser", uk: "не підтримується браузером" },
             remote_new_code: { ru: "Сменить код", en: "New code", uk: "Змінити код" },
             remote_new_code_hint: {
                 ru: "Старый код перестанет работать",
@@ -211,6 +263,17 @@
             },
             onChange: function () {
                 Lampa.Noty.show(t("remote_code") + ": " + pretty(getCode()));
+            }
+        });
+        Lampa.SettingsApi.addParam({
+            component: "remote",
+            param: { type: "button" },
+            field: { name: t("remote_status") },
+            onRender: function (item) {
+                item.find(".settings-param__name").text(t("remote_status") + ": " + statusText());
+            },
+            onChange: function () {
+                Lampa.Noty.show(t("remote_status") + ": " + statusText());
             }
         });
         Lampa.SettingsApi.addParam({
