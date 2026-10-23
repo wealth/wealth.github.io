@@ -1,8 +1,8 @@
 # Lampa + Twitch
 
-A fork of [Lampa](https://github.com/yumata/lampa) with **Twitch, Kick and live baseball as first-class sidebar sections**.
+A fork of [Lampa](https://github.com/yumata/lampa) with **Twitch, Kick, live baseball and free Russian TV as first-class sidebar sections**.
 
-Lampa is a free media catalog for Smart TVs (movies and series via public metadata). This fork keeps that app and adds the unofficial Twitch client that used to live in this repo as a standalone Media Station X plugin, plus a Kick section and a Baseball section built the same way.
+Lampa is a free media catalog for Smart TVs (movies and series via public metadata). This fork keeps that app and adds the unofficial Twitch client that used to live in this repo as a standalone Media Station X plugin, plus Kick, Baseball and TV sections built the same way.
 
 Sources for Lampa itself: [yumata/lampa-source](https://github.com/yumata/lampa-source).
 
@@ -80,7 +80,51 @@ worker/soop-proxy.js  Cloudflare Worker in front of the origin-locked SOOP calls
 
 The Worker is deployed by hand (steps are at the top of the file) and is **not rebuilt from the repo**: re-paste it into Cloudflare whenever `worker/soop-proxy.js` changes. Until then the app says which feature is waiting for it — replays, for instance, list fine but need the `/vod` route to play.
 
-Not affiliated with Twitch, Kick, SOOP, Amazon, or Lampa’s authors.
+## TV section
+
+Open **ТВ** in the Lampa sidebar (under Baseball). Free Russian channels, live, from the [iptv-org](https://github.com/iptv-org/iptv) database.
+
+- **Эфирные** — the 20 federal channels first, under their usual numbers. One with no working stream stays in, dimmed, so the numbers keep matching the remote
+- One line per genre after that: news, movies and series, sports, kids, music, documentaries, entertainment
+- **Favorites** — long-press a card; they lead the page from the next visit
+- Playback uses Lampa's IPTV player over the whole list: **CH+/CH−** zap, **digits** jump to a channel number
+- `window.LampaTV.play(idOrNumber)` opens a channel from outside the UI, e.g. `LampaTV.play(1)` for Первый канал
+
+```
+plugins/tv.js    Lampa section (lines, favorites, IPTV player)
+plugins/tv.css   Cards
+iptv/ru.json     Channel list, generated — do not edit by hand
+tools/iptv.py    Builds iptv/ru.json: iptv-org channels for RU, every stream checked
+```
+
+The list is a copy in this repo rather than read from iptv-org at runtime, because the TV cannot reach GitHub's CDN (see below). Streams are checked by `tools/iptv.py` **from the network the TV is on** — many Russian broadcasters only serve Russian addresses, so a check from CI or a VPN would throw away the channels that work at home. Rebuild it from any machine there with Python 3, for example the home Home Assistant box:
+
+```
+ssh root@<home box> 'docker exec -i homeassistant python3 -' < tools/iptv.py > iptv/ru.json
+```
+
+The check takes several minutes (about a thousand streams, failures retried once). Free streams come and go, so expect a few percent of channels to change between runs. Each channel keeps up to three working streams; on a page served over HTTPS, newer browsers (Chromium 81+) block `http://` video, so there the plugin picks an `https://` one when the channel has it.
+
+## Remote control
+
+Lets something outside the TV — Home Assistant behind a voice assistant, say — start a TV channel or a Twitch stream on one device. **Off by default, per device.**
+
+**Settings → Пульт → Удалённое управление: Да** turns it on. The same menu shows the device's code (e.g. `X3RB-A6KB-MG4U`): random, generated on the device, never in this repo. The device listens on the [ntfy.sh](https://ntfy.sh) topic `lampa-<code, lowercase, no dashes>` and acts only on what is published there, so a command for one TV never reaches another device running this fork. Whoever knows the code can switch channels on that TV and nothing else; **Сменить код** revokes it.
+
+```
+curl -d '{"action":"tv","value":1}'          https://ntfy.sh/lampa-x3rba6kbmg4u   # TV channel 1 (or an iptv-org id)
+curl -d '{"action":"twitch","value":"login"}' https://ntfy.sh/lampa-x3rba6kbmg4u   # live stream, or the channel page if offline
+```
+
+On connect the device asks for the last two minutes, so a command sent while the TV is still switching on and Lampa is loading is picked up once it starts. Handled messages are remembered, so a reload doesn't replay one.
+
+```
+plugins/remote.js   Settings, device code, ntfy.sh subscription
+```
+
+It drives `window.LampaTV.play()` (plugins/tv.js) and `window.LampaTwitch.play()` (plugins/twitch.js).
+
+Not affiliated with Twitch, Kick, SOOP, Amazon, iptv-org, ntfy, or Lampa’s authors.
 
 ## Install for MSX
 

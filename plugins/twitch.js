@@ -1336,6 +1336,27 @@
         addSettings();
         hookPlayer();
 
+        /* Start a channel from outside the UI (plugins/remote.js): the live
+           stream when there is one, the channel page when it's offline. */
+        window.LampaTwitch = {
+            version: VERSION,
+            play: function (login) {
+                login = String(login || "").toLowerCase();
+                Twitch.channel(login, function (err, user) {
+                    if (err || !user) { Lampa.Noty.show(err || login); return; }
+                    if (!user.stream) {
+                        Lampa.Noty.show((user.displayName || login) + ": " + t("twitch_offline"));
+                        openChannel(user.login);
+                        return;
+                    }
+                    playLive({
+                        title: user.stream.title,
+                        broadcaster: { id: user.id, login: user.login, displayName: user.displayName }
+                    });
+                });
+            }
+        };
+
         if (window.appready) { addMenu(); }
         else {
             Lampa.Listener.follow("app", function (e) {

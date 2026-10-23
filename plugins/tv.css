@@ -1,0 +1,92 @@
+/* TV section for the Lampa fork — same card metrics as the Baseball and
+   Twitch sections. Uses a padding-ratio box rather than CSS aspect-ratio,
+   which old webOS Chromium (<88) does not support. */
+
+.tv-card {
+    width: 13em;
+    flex-shrink: 0;
+}
+.tv-card + .tv-card {
+    margin-left: 1em;
+}
+.tv-card .card__view {
+    padding-bottom: 56.25%;
+    background: #2f3237;
+    border-radius: 0.3em;
+    overflow: hidden;
+}
+
+/* Logos come in every shape, so fit them inside the box with room to breathe. */
+.tv-card__logo {
+    position: absolute;
+    top: 14%;
+    left: 12%;
+    width: 76%;
+    height: 72%;
+    object-fit: contain;
+    opacity: 0;
+    -webkit-transition: opacity 0.2s;
+    transition: opacity 0.2s;
+}
+.tv-card--logo .tv-card__logo {
+    opacity: 1;
+}
+
+/* The channel name stands in until (or unless) a logo loads. */
+.tv-card__text {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.8em;
+    text-align: center;
+    font-size: 1.15em;
+    font-weight: 600;
+    line-height: 1.2;
+}
+.tv-card--logo .tv-card__text {
+    display: none;
+}
+
+/* Federal channel number. Same metrics as the LIVE flag on a Baseball card. */
+.tv-card__number {
+    position: absolute;
+    top: 0.4em;
+    left: 0.4em;
+    min-width: 1.4em;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 0.72em;
+    font-weight: 700;
+    text-align: center;
+    padding: 0.12em 0.4em;
+    border-radius: 0.2em;
+    z-index: 2;
+}
+
+/* A federal channel with no working stream: kept for its number, dimmed. */
+.tv-card--off .card__view > :not(.tv-card__number):not(.tv-card__off) {
+    opacity: 0.35;
+}
+.tv-card__off {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0.5em;
+    text-align: center;
+    font-size: 0.8em;
+    opacity: 0.8;
+}
+
+.tv-card--empty .card__view {
+    background: rgba(255, 255, 255, 0.06);
+}
+.tv-card--empty .tv-card__text {
+    font-size: 0.95em;
+    font-weight: 400;
+    opacity: 0.65;
+}
