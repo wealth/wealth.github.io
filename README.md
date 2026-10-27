@@ -88,7 +88,7 @@ Open **ТВ** in the Lampa sidebar (under Baseball). Free Russian channels, live
 - One line per genre after that: news, movies and series, sports, kids, music, documentaries, entertainment
 - **Favorites** — long-press a card; they lead the page from the next visit
 - Playback uses Lampa's IPTV player over the whole list: **CH+/CH−** zap, **digits** jump to a channel number
-- `window.LampaTV.play(idOrNumber)` opens a channel from outside the UI, e.g. `LampaTV.play(1)` for Первый канал
+- `window.LampaTV.play(idOrNumber)` opens a channel from outside the UI, e.g. `LampaTV.play(1)` for Первый канал. A number is the channel's place in the whole list, the same one the player's digits and counter use, so it goes past the 20 federal ones (`LampaTV.play(31)`)
 
 ```
 plugins/tv.js    Lampa section (lines, favorites, IPTV player)

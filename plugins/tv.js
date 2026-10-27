@@ -15,7 +15,7 @@
 (function () {
     "use strict";
 
-    var VERSION = "1.0.0";
+    var VERSION = "1.0.1";
     var LIST_URL = "iptv/ru.json";
     var FAV_KEY = "tv_favorites";
     /* Logos are on third-party hosts, ~300 of them: fetch a screenful per line,
@@ -55,11 +55,16 @@
         req.send(null);
     }
 
+    /* A number is a place in the list, counted from 1: what the player's digit
+       keys and its 001… counter use. Only the federal channels carry a
+       "number", and tools/iptv.py keeps them first and contiguous, so for 1–20
+       the two agree; past that, only the place exists. */
     function find(key) {
         if (!list) { return null; }
+        var n = +key;
+        if (n >= 1 && n <= list.channels.length && n % 1 === 0) { return list.channels[n - 1]; }
         for (var i = 0; i < list.channels.length; i++) {
-            var ch = list.channels[i];
-            if (ch.id === key || (ch.number && ch.number === +key)) { return ch; }
+            if (list.channels[i].id === key) { return list.channels[i]; }
         }
         return null;
     }
